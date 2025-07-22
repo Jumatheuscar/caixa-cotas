@@ -235,7 +235,7 @@ st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
 # Empresas corretas baseadas nos dados reais
-empresas = ["Apuaama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
+empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
 contas = [
     "Conta recebimento",
     "Conta de conciliação", 
