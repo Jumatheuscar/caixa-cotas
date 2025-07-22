@@ -202,77 +202,7 @@ df_cotas_dia = df_cotas[df_cotas["Data"] == pd.to_datetime(data_cota_sel)]
 st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
-contas = [
-    "Conta recebimento",
-    "Conta de conciliação", 
-    "Reserva de caixa",
-    "Conta pgto",
-    "Disponível para operação"
-]
-
-matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
-
-# DEBUG TEMPORÁRIO - Vamos ver exatamente os nomes das colunas
-st.write("COLUNAS DISPONÍVEIS:", list(df_caixa_dia.columns))
-
-for emp in empresas:
-    dados_emp = df_caixa_dia[df_caixa_dia["Empresa"].str.lower() == emp.lower()]
-    
-    if not dados_emp.empty:
-        # Vamos usar os nomes EXATOS das colunas da planilha
-        # Baseado na primeira imagem, as colunas eram: Data, Empresa, e mais algumas
-        # Vou tentar pegar pela posição ou nome mais próximo
-        
-        colunas_disp = dados_emp.columns.tolist()
-        
-        # Tenta encontrar as colunas por nome aproximado (case insensitive)
-        receb = 0
-        conc = 0
-        reserva = 0
-        pgto = 0
-        
-        for col in colunas_disp:
-            col_lower = col.lower()
-            if "receb" in col_lower:
-                receb = dados_emp[col].sum()
-            elif "concilia" in col_lower:
-                conc = dados_emp[col].sum()
-            elif "reserva" in col_lower:
-                reserva = dados_emp[col].sum()
-            elif "pgto" in col_lower or "pagamento" in col_lower:
-                pgto = dados_emp[col].sum()
-        
-        # Conversão segura para float
-        try:
-            receb = float(receb) if pd.notna(receb) else 0
-        except:
-            receb = 0
-            
-        try:
-            conc = float(conc) if pd.notna(conc) else 0
-        except:
-            conc = 0
-            
-        try:
-            reserva = float(reserva) if pd.notna(reserva) else 0
-        except:
-            reserva = 0
-            
-        try:
-            pgto = float(pgto) if pd.notna(pgto) else 0
-        except:
-            pgto = 0
-        
-        disponil = pgto - reserva
-        
-        # Preenchimento da matriz - SEMPRE mostra os valores
-        matriz.at["Conta recebimento", emp] = receb
-        matriz.at["Conta de conciliação", emp] = conc
-        matriz.at["Reserva de caixa", emp] = reserva
-        matriz.at["Conta pgto", emp] = pgto
-        matriz.at["Disponível para operação", emp] = disponil
-
+# SIMPLIFICANDO: Vou apenas mostrar os dados brutos da planilha filtrados por data
 def brl(x):
     try:
         if pd.isna(x):
@@ -282,12 +212,28 @@ def brl(x):
     except Exception:
         return "R$ 0,00"
 
-st.dataframe(
-    matriz.applymap(brl),
-    use_container_width=False,
-    width=940,
-    height=210,
-)
+# Se tem dados para a data selecionada, mostra a tabela simples
+if not df_caixa_dia.empty:
+    # Remove colunas que não são numéricas (Data, Empresa) 
+    colunas_numericas = df_caixa_dia.select_dtypes(include=[float, int]).columns
+    
+    if len(colunas_numericas) > 0:
+        # Cria uma tabela pivoteada simples: Empresa vs todas as colunas numéricas
+        tabela_caixa = df_caixa_dia.set_index("Empresa")[colunas_numericas]
+        
+        # Aplica formatação BRL em todas as colunas
+        tabela_formatada = tabela_caixa.applymap(brl)
+        
+        st.dataframe(
+            tabela_formatada,
+            use_container_width=False,
+            width=940,
+            height=210,
+        )
+    else:
+        st.info("Nenhuma coluna numérica encontrada nos dados do caixa.")
+else:
+    st.info(f"Nenhum dado encontrado para a data {data_caixa_br}")
 
 # ========== SEÇÃO COTAS ==========
 st.markdown("<h3>Cotas</h3>", unsafe_allow_html=True)
