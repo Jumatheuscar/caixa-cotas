@@ -205,7 +205,7 @@ st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</spa
 empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
 contas = [
     "Conta recebimento",
-    "Conta de conciliação",
+    "Conta de conciliação", 
     "Reserva de caixa",
     "Conta pgto",
     "Disponível para operação"
@@ -213,75 +213,74 @@ contas = [
 
 matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
-# Mapeamento das colunas reais da planilha (baseado na estrutura típica)
-colunas_map = {
-    "Conta recebimento": ["Conta recebimento", "Recebimento", "Conta Recebimento"],
-    "Conta de conciliação": ["Conta de conciliação", "Conciliação", "Conta Conciliação"],
-    "Reserva": ["Reserva", "Reserva de caixa", "Reserva Caixa"],
-    "Conta pgto": ["Conta pgto", "Pagamento", "Conta Pagamento", "Conta Pgto"]
-}
-
-def encontrar_coluna(df, possiveis_nomes):
-    """Encontra a coluna correta baseada em uma lista de possíveis nomes"""
-    for nome in possiveis_nomes:
-        if nome in df.columns:
-            return nome
-    return None
+# DEBUG TEMPORÁRIO - Vamos ver exatamente os nomes das colunas
+st.write("COLUNAS DISPONÍVEIS:", list(df_caixa_dia.columns))
 
 for emp in empresas:
     dados_emp = df_caixa_dia[df_caixa_dia["Empresa"].str.lower() == emp.lower()]
     
     if not dados_emp.empty:
-        # Busca as colunas corretas
-        col_receb = encontrar_coluna(dados_emp, colunas_map["Conta recebimento"])
-        col_conc = encontrar_coluna(dados_emp, colunas_map["Conta de conciliação"])
-        col_reserva = encontrar_coluna(dados_emp, colunas_map["Reserva"])
-        col_pgto = encontrar_coluna(dados_emp, colunas_map["Conta pgto"])
+        # Vamos usar os nomes EXATOS das colunas da planilha
+        # Baseado na primeira imagem, as colunas eram: Data, Empresa, e mais algumas
+        # Vou tentar pegar pela posição ou nome mais próximo
         
-        # Extrai os valores
-        receb = dados_emp[col_receb].sum() if col_receb else 0
-        conc = dados_emp[col_conc].sum() if col_conc else 0
-        reserva = dados_emp[col_reserva].sum() if col_reserva else 0
-        pgto = dados_emp[col_pgto].sum() if col_pgto else 0
+        colunas_disp = dados_emp.columns.tolist()
+        
+        # Tenta encontrar as colunas por nome aproximado (case insensitive)
+        receb = 0
+        conc = 0
+        reserva = 0
+        pgto = 0
+        
+        for col in colunas_disp:
+            col_lower = col.lower()
+            if "receb" in col_lower:
+                receb = dados_emp[col].sum()
+            elif "concilia" in col_lower:
+                conc = dados_emp[col].sum()
+            elif "reserva" in col_lower:
+                reserva = dados_emp[col].sum()
+            elif "pgto" in col_lower or "pagamento" in col_lower:
+                pgto = dados_emp[col].sum()
         
         # Conversão segura para float
         try:
-            receb = float(receb) if pd.notna(receb) and str(receb).strip() != "" else 0
+            receb = float(receb) if pd.notna(receb) else 0
         except:
             receb = 0
             
         try:
-            conc = float(conc) if pd.notna(conc) and str(conc).strip() != "" else 0
+            conc = float(conc) if pd.notna(conc) else 0
         except:
             conc = 0
             
         try:
-            reserva = float(reserva) if pd.notna(reserva) and str(reserva).strip() != "" else 0
+            reserva = float(reserva) if pd.notna(reserva) else 0
         except:
             reserva = 0
             
         try:
-            pgto = float(pgto) if pd.notna(pgto) and str(pgto).strip() != "" else 0
+            pgto = float(pgto) if pd.notna(pgto) else 0
         except:
             pgto = 0
         
         disponil = pgto - reserva
         
-        # Preenchimento da matriz (só mostra valores diferentes de zero)
-        matriz.at["Conta recebimento", emp] = receb if receb != 0 else None
-        matriz.at["Conta de conciliação", emp] = conc if conc != 0 else None
-        matriz.at["Reserva de caixa", emp] = reserva if reserva != 0 else None
-        matriz.at["Conta pgto", emp] = pgto if pgto != 0 else None
-        matriz.at["Disponível para operação", emp] = disponil if disponil != 0 else None
+        # Preenchimento da matriz - SEMPRE mostra os valores
+        matriz.at["Conta recebimento", emp] = receb
+        matriz.at["Conta de conciliação", emp] = conc
+        matriz.at["Reserva de caixa", emp] = reserva
+        matriz.at["Conta pgto", emp] = pgto
+        matriz.at["Disponível para operação", emp] = disponil
 
 def brl(x):
     try:
-        if pd.isna(x) or x == "" or x is None:
-            return ""
+        if pd.isna(x):
+            return "R$ 0,00"
         x_float = float(x)
         return f"R$ {x_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except Exception:
-        return ""
+        return "R$ 0,00"
 
 st.dataframe(
     matriz.applymap(brl),
