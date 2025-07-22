@@ -233,9 +233,16 @@ for emp in empresas:
 
 
 def brl(x):
-    if pd.isna(x) or x == "":
+    try:
+        # Testa para número (int, float, numpy.number)
+        if pd.isna(x) or x == "" or x is None:
+            return ""
+        x_float = float(x)
+        return f"R$ {x_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        # Se entrar outro tipo qualquer (texto, lista etc), retorna vazio
         return ""
-    return f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 
 st.dataframe(
     matriz.applymap(brl),
