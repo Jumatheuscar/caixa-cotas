@@ -310,7 +310,7 @@ st.markdown(f'<div class="captionTABLE">Variação mensal e anual dos fundos - d
 st.markdown('<hr style="margin-top:1.2em;margin-bottom:0.2em;">', unsafe_allow_html=True)
 st.markdown('<h3>Evolução das cotas mensais dos fundos</h3>', unsafe_allow_html=True)
 
-cols_graph_center, col_graph, cols_graph_right = st.columns([2,4,2])
+cols_graph_center, col_graph, cols_graph_right = st.columns([1,6,1])
 
 with col_graph:
     try:
