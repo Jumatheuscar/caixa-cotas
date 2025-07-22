@@ -234,8 +234,8 @@ df_cotas_dia = df_cotas[df_cotas["Data"] == pd.to_datetime(data_cota_sel)]
 st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-# Empresas corretas (incluindo "Apuaama" que apareceu no debug)
-empresas = ["Apuaama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
+# CORRIGIDO: Nome correto é "Apuama" não "Apuaama"
+empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
 contas = [
     "Conta recebimento",
     "Conta de conciliação", 
@@ -252,12 +252,15 @@ for empresa in empresas:
     for conta in contas:
         matriz.at[conta, empresa] = 0.0
 
+# DEBUG: Vamos ver que empresas existem nos dados
+st.write("**DEBUG - Empresas encontradas nos dados:**", df_caixa_dia["Empresa"].unique().tolist())
+
 # Preenche com dados reais usando os NOMES CORRETOS das colunas
 for _, linha in df_caixa_dia.iterrows():
     empresa = linha["Empresa"]
     
     if empresa in empresas:
-        # Usa os nomes corretos das colunas que apareceram no debug
+        # Usa os nomes corretos das colunas
         conta_receb = converter_valor_br(linha["Conta recebimento"])
         conta_conc = converter_valor_br(linha["Conta de conciliação"])
         reserva = converter_valor_br(linha["Reserva"])
@@ -292,24 +295,8 @@ st.dataframe(
 st.markdown("<h3>Cotas</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>Cotas {data_cota_br}</span>", unsafe_allow_html=True)
 
-def percent_br(x):
-    try:
-        if pd.isna(x) or x == "" or x is None:
-            return ""
-        # Se já está em formato de porcentagem (-0,27%)
-        if isinstance(x, str) and '%' in x:
-            return x
-        x_float = float(x)
-        return f"{x_float:.2%}".replace(".", ",")
-    except Exception:
-        return ""
-
 tabela_cotas = df_cotas_dia[["Fundo", "Cota mensal", "Cota anual"]].copy()
 tabela_cotas = tabela_cotas.dropna(how="all")
-
-# As cotas já estão formatadas como porcentagem, então não precisa converter
-# tabela_cotas["Cota mensal"] = tabela_cotas["Cota mensal"].apply(percent_br)
-# tabela_cotas["Cota anual"] = tabela_cotas["Cota anual"].apply(percent_br)
 
 altura_cotas = 62 + max(44, 40*len(tabela_cotas))
 
