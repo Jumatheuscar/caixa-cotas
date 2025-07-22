@@ -230,12 +230,12 @@ data_cota_br = date_br(data_cota_sel)
 df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 df_cotas_dia = df_cotas[df_cotas["Data"] == pd.to_datetime(data_cota_sel)]
 
-# ========== SEÇÃO CAIXA COM NOMES CORRETOS ==========
+# ========== SEÇÃO CAIXA ==========
 st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-# CORRIGIDO: Nome correto é "Apuama" não "Apuaama"
-empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
+# Empresas corretas baseadas nos dados reais
+empresas = ["Apuaama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
 contas = [
     "Conta recebimento",
     "Conta de conciliação", 
@@ -252,10 +252,7 @@ for empresa in empresas:
     for conta in contas:
         matriz.at[conta, empresa] = 0.0
 
-# DEBUG: Vamos ver que empresas existem nos dados
-st.write("**DEBUG - Empresas encontradas nos dados:**", df_caixa_dia["Empresa"].unique().tolist())
-
-# Preenche com dados reais usando os NOMES CORRETOS das colunas
+# Preenche com dados reais
 for _, linha in df_caixa_dia.iterrows():
     empresa = linha["Empresa"]
     
