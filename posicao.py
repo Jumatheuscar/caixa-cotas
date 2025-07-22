@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import requests
 from io import StringIO
+import re
 
 # =================== CORES ===================
 SPACE_CADET = "#272846"
@@ -77,6 +78,38 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# ========== FUNÇÃO PARA CONVERTER VALORES BRASILEIROS ==========
+def converter_valor_br(valor):
+    """Converte valor brasileiro (R$ 1.000,00) para float"""
+    if pd.isna(valor) or valor == "" or valor is None:
+        return 0.0
+    
+    # Remove R$, espaços e converte formato brasileiro
+    valor_str = str(valor).replace("R$", "").replace(" ", "").strip()
+    
+    # Se já está em formato americano (com ponto como decimal)
+    if valor_str.count('.') == 1 and valor_str.count(',') == 0:
+        try:
+            return float(valor_str)
+        except:
+            return 0.0
+    
+    # Formato brasileiro: 1.000.000,50
+    # Remove pontos (milhares) e troca vírgula por ponto (decimal)
+    if ',' in valor_str:
+        partes = valor_str.split(',')
+        parte_inteira = partes[0].replace('.', '')
+        parte_decimal = partes[1] if len(partes) > 1 else '00'
+        valor_str = f"{parte_inteira}.{parte_decimal}"
+    else:
+        # Sem vírgula, apenas remove pontos
+        valor_str = valor_str.replace('.', '')
+    
+    try:
+        return float(valor_str)
+    except:
+        return 0.0
+
 # ========== SENHA ==========
 def autentica_usuario():
     st.markdown(
@@ -141,19 +174,6 @@ r_cotas = requests.get(url_cotas)
 r_cotas.raise_for_status()
 df_cotas = pd.read_csv(StringIO(r_cotas.text))
 
-# ========== DEBUG: VAMOS VER OS DADOS BRUTOS ==========
-st.markdown("### 🔍 DEBUG - Dados do Caixa")
-st.write("**Colunas disponíveis:**", list(df_caixa.columns))
-st.write("**Shape do DataFrame:**", df_caixa.shape)
-st.write("**Primeiras 3 linhas:**")
-st.dataframe(df_caixa.head(3))
-
-st.markdown("### 🔍 DEBUG - Dados das Cotas")
-st.write("**Colunas disponíveis:**", list(df_cotas.columns))
-st.write("**Shape do DataFrame:**", df_cotas.shape)
-st.write("**Primeiras 3 linhas:**")
-st.dataframe(df_cotas.head(3))
-
 df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 df_cotas["Data"] = pd.to_datetime(df_cotas["Data"], dayfirst=True, errors="coerce")
 
@@ -210,12 +230,128 @@ data_cota_br = date_br(data_cota_sel)
 df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 df_cotas_dia = df_cotas[df_cotas["Data"] == pd.to_datetime(data_cota_sel)]
 
-st.markdown("### 🔍 DEBUG - Dados Filtrados por Data")
-st.write(f"**Data selecionada:** {data_caixa_br}")
-st.write(f"**Linhas encontradas para o caixa:** {len(df_caixa_dia)}")
-if not df_caixa_dia.empty:
-    st.write("**Dados do caixa para a data:**")
-    st.dataframe(df_caixa_dia)
+# ========== SEÇÃO CAIXA COM NOMES CORRETOS ==========
+st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
+st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
+
+# Empresas corretas (incluindo "Apuaama" que apareceu no debug)
+empresas = ["Apuaama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
+contas = [
+    "Conta recebimento",
+    "Conta de conciliação", 
+    "Reserva de caixa",
+    "Conta pgto",
+    "Disponível para operação"
+]
+
+# Cria a matriz
+matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
+
+# Preenche com zero primeiro
+for empresa in empresas:
+    for conta in contas:
+        matriz.at[conta, empresa] = 0.0
+
+# Preenche com dados reais usando os NOMES CORRETOS das colunas
+for _, linha in df_caixa_dia.iterrows():
+    empresa = linha["Empresa"]
+    
+    if empresa in empresas:
+        # Usa os nomes corretos das colunas que apareceram no debug
+        conta_receb = converter_valor_br(linha["Conta recebimento"])
+        conta_conc = converter_valor_br(linha["Conta de conciliação"])
+        reserva = converter_valor_br(linha["Reserva"])
+        conta_pgto = converter_valor_br(linha["Conta pgto"])
+        
+        # Calcula disponível = conta pgto - reserva
+        disponivel = conta_pgto - reserva
+        
+        # Preenche a matriz
+        matriz.at["Conta recebimento", empresa] = conta_receb
+        matriz.at["Conta de conciliação", empresa] = conta_conc
+        matriz.at["Reserva de caixa", empresa] = reserva
+        matriz.at["Conta pgto", empresa] = conta_pgto
+        matriz.at["Disponível para operação", empresa] = disponivel
+
+# Função para formatar em Real
+def brl(x):
+    try:
+        x_float = float(x)
+        return f"R$ {x_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "R$ 0,00"
+
+st.dataframe(
+    matriz.applymap(brl),
+    use_container_width=False,
+    width=940,
+    height=210,
+)
+
+# ========== SEÇÃO COTAS ==========
+st.markdown("<h3>Cotas</h3>", unsafe_allow_html=True)
+st.markdown(f"<span class='table-title'>Cotas {data_cota_br}</span>", unsafe_allow_html=True)
+
+def percent_br(x):
+    try:
+        if pd.isna(x) or x == "" or x is None:
+            return ""
+        # Se já está em formato de porcentagem (-0,27%)
+        if isinstance(x, str) and '%' in x:
+            return x
+        x_float = float(x)
+        return f"{x_float:.2%}".replace(".", ",")
+    except Exception:
+        return ""
+
+tabela_cotas = df_cotas_dia[["Fundo", "Cota mensal", "Cota anual"]].copy()
+tabela_cotas = tabela_cotas.dropna(how="all")
+
+# As cotas já estão formatadas como porcentagem, então não precisa converter
+# tabela_cotas["Cota mensal"] = tabela_cotas["Cota mensal"].apply(percent_br)
+# tabela_cotas["Cota anual"] = tabela_cotas["Cota anual"].apply(percent_br)
+
+altura_cotas = 62 + max(44, 40*len(tabela_cotas))
+
+st.dataframe(
+    tabela_cotas.reset_index(drop=True),
+    use_container_width=False,
+    width=465,
+    height=altura_cotas,
+)
+
+st.markdown(f'<div class="captionTABLE">Variação mensal e anual dos fundos - dados oficiais Libra Capital</div>', unsafe_allow_html=True)
+
+# ========== GRÁFICO DA EVOLUÇÃO ==========
+st.markdown('<hr style="margin-top:1.2em;margin-bottom:0.2em;">', unsafe_allow_html=True)
+st.markdown('<h3>Evolução das cotas mensais dos fundos</h3>', unsafe_allow_html=True)
+
+cols_graph_center, col_graph, cols_graph_right = st.columns([2,4,2])
+
+with col_graph:
+    try:
+        df_cotas_graf = df_cotas[
+            (df_cotas["Data"] >= pd.to_datetime(periodo_graf[0]))
+            & (df_cotas["Data"] <= pd.to_datetime(periodo_graf[1]))
+        ]
+        
+        if not df_cotas_graf.empty:
+            # Converte cotas para valores numéricos para o gráfico
+            df_cotas_graf = df_cotas_graf.copy()
+            df_cotas_graf["Cota mensal"] = df_cotas_graf["Cota mensal"].apply(
+                lambda x: float(x.replace('%', '').replace(',', '.')) / 100 if isinstance(x, str) and '%' in x else x
+            )
+            
+            graf = df_cotas_graf.pivot(
+                index="Data",
+                columns="Fundo",
+                values="Cota mensal"
+            )
+            st.line_chart(graf, use_container_width=True, height=255)
+        else:
+            st.info("Selecione um período válido para exibir o gráfico.")
+    except Exception as e:
+        st.error(f"Erro no gráfico: {e}")
 
 # ========== RODAPÉ ==========
 st.markdown(
