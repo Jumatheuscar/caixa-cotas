@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 import datetime
 
 # =================== CORES ===================
@@ -76,24 +75,45 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# ========== SENHA ==========
+def autentica_usuario():
+    st.markdown(
+        "<h3 style='color:#e5a125;text-align:center'>🔒 Acesso restrito</h3>",
+        unsafe_allow_html=True
+    )
+    senha = st.text_input("Para acessar as posições, digite a senha:", type="password")
+    if senha == "jmjp#agi@fu$obeglgct22":
+        st.success("Senha correta! Bem-vindo ao painel.")
+        return True
+    elif senha and senha != "jmjp#agi@fu$obeglgct22":
+        st.error("Senha incorreta.")
+        st.warning("Se você não tem a senha, contacte o responsável pelo time LIBRA CAPITAL.")
+        return False
+    else:
+        st.info("Digite a senha para acessar o painel.")
+        return False
+
+if not autentica_usuario():
+    st.stop()
+
 # ========== HEADER: LOGO + TÍTULO ==========
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
-        st.image("G:/Drives compartilhados/13. DATA ANALYSIS/04. Logos/Capital - Branca.png", width=55)
+        st.image("imagens/Capital-branca.png", width=55)
     with cols[1]:
         st.markdown(
             f"""
             <span style='
-                color: #f0f8ea; 
-                font-size: 2.1rem; 
+                color: #f0f8ea;
+                font-size: 2.1rem;
                 font-weight:900;
                 letter-spacing:0.03em;
                 border-bottom: 2px solid #e5a12566;
                 padding-bottom: 0.12em;
                 line-height: 1.14;
                 '>
-                LIBRA CAPITAL 
+                LIBRA CAPITAL
                 <span style='font-weight:400;color:#e5a125;'>| Posição Diária</span>
             </span>
             """,
@@ -105,11 +125,12 @@ st.markdown('<br/>', unsafe_allow_html=True)
 st.sidebar.title("FILTRAR VISUALIZAÇÃO")
 st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}22;">', unsafe_allow_html=True)
 
-# === Leitura dos dados ===
-EXCEL_PATH = Path(r"G:\Drives compartilhados\1. FIDC\Caixa_e_Cotas.xlsx")
-with pd.ExcelFile(EXCEL_PATH) as xls:
-    df_caixa = pd.read_excel(xls, sheet_name="Caixa")
-    df_cotas = pd.read_excel(xls, sheet_name="Cotas")
+# === Leitura dos dados do Google Sheets ===
+GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
+url_cotas = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Cotas"
+df_caixa = pd.read_csv(url_caixa)
+df_cotas = pd.read_csv(url_cotas)
 
 df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 df_cotas["Data"] = pd.to_datetime(df_cotas["Data"], dayfirst=True, errors="coerce")
@@ -130,6 +151,7 @@ data_caixa_sel = st.sidebar.date_input(
     key="data_caixa",
     format="DD/MM/YYYY"
 )
+
 # === DATA DAS COTAS ===
 datas_cotas = sorted(df_cotas["Data"].dropna().unique())
 default_cotas = max(datas_cotas)
@@ -141,6 +163,7 @@ data_cota_sel = st.sidebar.date_input(
     key="data_cotas",
     format="DD/MM/YYYY"
 )
+
 # === PERÍODO DO GRÁFICO ===
 min_graf, max_graf = min(df_cotas["Data"]), max(df_cotas["Data"])
 periodo_graf = st.sidebar.date_input(
@@ -160,14 +183,12 @@ if hasattr(data_cota_sel, "to_pydatetime"):
 data_caixa_br = date_br(data_caixa_sel)
 data_cota_br = date_br(data_cota_sel)
 periodo_graf_br = [date_br(periodo_graf[0]), date_br(periodo_graf[1])]
-
 df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 df_cotas_dia = df_cotas[df_cotas["Data"] == pd.to_datetime(data_cota_sel)]
 
 # ========== SEÇÃO CAIXA ===========
 st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
-
 empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
 contas = [
     "Conta recebimento",
@@ -179,17 +200,16 @@ contas = [
 matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 for emp in empresas:
     dados_emp = df_caixa_dia[df_caixa_dia["Empresa"].str.lower() == emp.lower()]
-    receb   = dados_emp["Conta recebimento"].sum()       if "Conta recebimento" in dados_emp.columns else 0
-    conc    = dados_emp["Conta de conciliação"].sum()    if "Conta de conciliação" in dados_emp.columns else 0
-    reserva = dados_emp["Reserva"].sum()                 if "Reserva" in dados_emp.columns else 0
-    pgto    = dados_emp["Conta pgto"].sum()              if "Conta pgto" in dados_emp.columns else 0
+    receb = dados_emp["Conta recebimento"].sum() if "Conta recebimento" in dados_emp.columns else 0
+    conc = dados_emp["Conta de conciliação"].sum() if "Conta de conciliação" in dados_emp.columns else 0
+    reserva = dados_emp["Reserva"].sum() if "Reserva" in dados_emp.columns else 0
+    pgto = dados_emp["Conta pgto"].sum() if "Conta pgto" in dados_emp.columns else 0
     disponil = pgto - reserva
-
-    matriz.at["Conta recebimento", emp]          = receb   if receb   != 0 else None
-    matriz.at["Conta de conciliação", emp]       = conc    if conc    != 0 else None
-    matriz.at["Reserva de caixa", emp]           = reserva if reserva != 0 else None
-    matriz.at["Conta pgto", emp]                 = pgto    if pgto    != 0 else None
-    matriz.at["Disponível para operação", emp]   = disponil if disponil != 0 else None
+    matriz.at["Conta recebimento", emp] = receb if receb != 0 else None
+    matriz.at["Conta de conciliação", emp] = conc if conc != 0 else None
+    matriz.at["Reserva de caixa", emp] = reserva if reserva != 0 else None
+    matriz.at["Conta pgto", emp] = pgto if pgto != 0 else None
+    matriz["Disponível para operação", emp] = disponil if disponil != 0 else None
 
 def brl(x):
     if pd.isna(x) or x == "":
@@ -212,7 +232,7 @@ def percent_br(x):
     return f"{x:.2%}".replace(".", ",")
 
 tabela_cotas = df_cotas_dia[["Fundo", "Cota mensal", "Cota anual"]].copy()
-tabela_cotas = tabela_cotas.dropna(how="all")  # remove linha totalmente vazia!
+tabela_cotas = tabela_cotas.dropna(how="all") # remove linha totalmente vazia!
 tabela_cotas["Cota mensal"] = tabela_cotas["Cota mensal"].apply(percent_br)
 tabela_cotas["Cota anual"] = tabela_cotas["Cota anual"].apply(percent_br)
 altura_cotas = 62 + max(44, 40*len(tabela_cotas))
@@ -222,7 +242,6 @@ st.dataframe(
     width=465,
     height=altura_cotas,
 )
-
 st.markdown(f'<div class="captionTABLE">Variação mensal e anual dos fundos - dados oficiais Libra Capital</div>', unsafe_allow_html=True)
 
 # ========== GRÁFICO DA EVOLUÇÃO ==========
@@ -238,7 +257,6 @@ with col_graph:
     except Exception as e:
         st.error(f"Erro no período do gráfico ({e})")
         df_cotas_graf = pd.DataFrame()
-
     if not df_cotas_graf.empty:
         graf = df_cotas_graf.pivot(
             index="Data",
@@ -256,4 +274,3 @@ st.markdown(
     </p>""",
     unsafe_allow_html=True,
 )
-
