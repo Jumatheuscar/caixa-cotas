@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import requests
+from io import StringIO
 
 # =================== CORES ===================
 SPACE_CADET = "#272846"
@@ -129,8 +131,14 @@ st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}22;">', unsafe_allow
 GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
 url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
 url_cotas = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Cotas"
-df_caixa = pd.read_csv(url_caixa)
-df_cotas = pd.read_csv(url_cotas)
+r_caixa = requests.get(url_caixa)
+r_caixa.raise_for_status()
+df_caixa = pd.read_csv(StringIO(r_caixa.text))
+
+r_cotas = requests.get(url_cotas)
+r_cotas.raise_for_status()
+df_cotas = pd.read_csv(StringIO(r_cotas.text))
+
 
 df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 df_cotas["Data"] = pd.to_datetime(df_cotas["Data"], dayfirst=True, errors="coerce")
