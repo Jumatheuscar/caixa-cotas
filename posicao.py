@@ -212,12 +212,25 @@ for emp in empresas:
     conc = dados_emp["Conta de conciliação"].sum() if "Conta de conciliação" in dados_emp.columns else 0
     reserva = dados_emp["Reserva"].sum() if "Reserva" in dados_emp.columns else 0
     pgto = dados_emp["Conta pgto"].sum() if "Conta pgto" in dados_emp.columns else 0
+
+    # Conversão para float (forçando 0 caso venha NaN, None ou string vazia)
+    try:
+        reserva = float(reserva) if pd.notna(reserva) and reserva != "" else 0
+    except:
+        reserva = 0
+    try:
+        pgto = float(pgto) if pd.notna(pgto) and pgto != "" else 0
+    except:
+        pgto = 0
+
     disponil = pgto - reserva
+
     matriz.at["Conta recebimento", emp] = receb if receb != 0 else None
     matriz.at["Conta de conciliação", emp] = conc if conc != 0 else None
     matriz.at["Reserva de caixa", emp] = reserva if reserva != 0 else None
     matriz.at["Conta pgto", emp] = pgto if pgto != 0 else None
-    matriz["Disponível para operação", emp] = disponil if disponil != 0 else None
+    matriz.at["Disponível para operação", emp] = disponil if disponil != 0 else None
+
 
 def brl(x):
     if pd.isna(x) or x == "":
