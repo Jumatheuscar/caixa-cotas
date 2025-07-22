@@ -213,58 +213,72 @@ contas = [
 
 matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
-# DEBUG: Vamos ver os dados antes de processar
-st.write("DEBUG - Dados caixa filtrados:", df_caixa_dia.shape)
-st.write("DEBUG - Empresas únicas na planilha:", df_caixa_dia["Empresa"].unique() if not df_caixa_dia.empty else "Nenhuma empresa encontrada")
-st.write("DEBUG - Colunas disponíveis:", df_caixa_dia.columns.tolist() if not df_caixa_dia.empty else "Sem colunas")
+# Mapeamento das colunas reais da planilha (baseado na estrutura típica)
+colunas_map = {
+    "Conta recebimento": ["Conta recebimento", "Recebimento", "Conta Recebimento"],
+    "Conta de conciliação": ["Conta de conciliação", "Conciliação", "Conta Conciliação"],
+    "Reserva": ["Reserva", "Reserva de caixa", "Reserva Caixa"],
+    "Conta pgto": ["Conta pgto", "Pagamento", "Conta Pagamento", "Conta Pgto"]
+}
+
+def encontrar_coluna(df, possiveis_nomes):
+    """Encontra a coluna correta baseada em uma lista de possíveis nomes"""
+    for nome in possiveis_nomes:
+        if nome in df.columns:
+            return nome
+    return None
 
 for emp in empresas:
     dados_emp = df_caixa_dia[df_caixa_dia["Empresa"].str.lower() == emp.lower()]
     
-    # Verificação mais robusta das colunas
-    receb = dados_emp["Conta recebimento"].sum() if "Conta recebimento" in dados_emp.columns and not dados_emp.empty else 0
-    conc = dados_emp["Conta de conciliação"].sum() if "Conta de conciliação" in dados_emp.columns and not dados_emp.empty else 0
-    reserva = dados_emp["Reserva"].sum() if "Reserva" in dados_emp.columns and not dados_emp.empty else 0
-    pgto = dados_emp["Conta pgto"].sum() if "Conta pgto" in dados_emp.columns and not dados_emp.empty else 0
-    
-    # Conversão mais robusta para float
-    try:
-        receb = float(receb) if pd.notna(receb) and str(receb).strip() != "" else 0
-    except:
-        receb = 0
+    if not dados_emp.empty:
+        # Busca as colunas corretas
+        col_receb = encontrar_coluna(dados_emp, colunas_map["Conta recebimento"])
+        col_conc = encontrar_coluna(dados_emp, colunas_map["Conta de conciliação"])
+        col_reserva = encontrar_coluna(dados_emp, colunas_map["Reserva"])
+        col_pgto = encontrar_coluna(dados_emp, colunas_map["Conta pgto"])
         
-    try:
-        conc = float(conc) if pd.notna(conc) and str(conc).strip() != "" else 0
-    except:
-        conc = 0
+        # Extrai os valores
+        receb = dados_emp[col_receb].sum() if col_receb else 0
+        conc = dados_emp[col_conc].sum() if col_conc else 0
+        reserva = dados_emp[col_reserva].sum() if col_reserva else 0
+        pgto = dados_emp[col_pgto].sum() if col_pgto else 0
         
-    try:
-        reserva = float(reserva) if pd.notna(reserva) and str(reserva).strip() != "" else 0
-    except:
-        reserva = 0
+        # Conversão segura para float
+        try:
+            receb = float(receb) if pd.notna(receb) and str(receb).strip() != "" else 0
+        except:
+            receb = 0
+            
+        try:
+            conc = float(conc) if pd.notna(conc) and str(conc).strip() != "" else 0
+        except:
+            conc = 0
+            
+        try:
+            reserva = float(reserva) if pd.notna(reserva) and str(reserva).strip() != "" else 0
+        except:
+            reserva = 0
+            
+        try:
+            pgto = float(pgto) if pd.notna(pgto) and str(pgto).strip() != "" else 0
+        except:
+            pgto = 0
         
-    try:
-        pgto = float(pgto) if pd.notna(pgto) and str(pgto).strip() != "" else 0
-    except:
-        pgto = 0
-    
-    disponil = pgto - reserva
-    
-    # Preenchimento da matriz - mostra 0 ao invés de None para debug
-    matriz.at["Conta recebimento", emp] = receb
-    matriz.at["Conta de conciliação", emp] = conc
-    matriz.at["Reserva de caixa", emp] = reserva
-    matriz.at["Conta pgto", emp] = pgto
-    matriz.at["Disponível para operação", emp] = disponil
+        disponil = pgto - reserva
+        
+        # Preenchimento da matriz (só mostra valores diferentes de zero)
+        matriz.at["Conta recebimento", emp] = receb if receb != 0 else None
+        matriz.at["Conta de conciliação", emp] = conc if conc != 0 else None
+        matriz.at["Reserva de caixa", emp] = reserva if reserva != 0 else None
+        matriz.at["Conta pgto", emp] = pgto if pgto != 0 else None
+        matriz.at["Disponível para operação", emp] = disponil if disponil != 0 else None
 
-# Função BRL corrigida
 def brl(x):
     try:
         if pd.isna(x) or x == "" or x is None:
             return ""
         x_float = float(x)
-        if x_float == 0:
-            return "R$ 0,00"
         return f"R$ {x_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except Exception:
         return ""
@@ -280,7 +294,6 @@ st.dataframe(
 st.markdown("<h3>Cotas</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>Cotas {data_cota_br}</span>", unsafe_allow_html=True)
 
-# Função percent_br corrigida
 def percent_br(x):
     try:
         if pd.isna(x) or x == "" or x is None:
@@ -291,11 +304,7 @@ def percent_br(x):
         return ""
 
 tabela_cotas = df_cotas_dia[["Fundo", "Cota mensal", "Cota anual"]].copy()
-tabela_cotas = tabela_cotas.dropna(how="all")  # remove linha totalmente vazia!
-
-# Debug das cotas
-st.write("DEBUG - Dados cotas filtrados:", tabela_cotas.shape)
-st.write("DEBUG - Primeiras linhas cotas:", tabela_cotas.head() if not tabela_cotas.empty else "Nenhum dado encontrado")
+tabela_cotas = tabela_cotas.dropna(how="all")
 
 tabela_cotas["Cota mensal"] = tabela_cotas["Cota mensal"].apply(percent_br)
 tabela_cotas["Cota anual"] = tabela_cotas["Cota anual"].apply(percent_br)
