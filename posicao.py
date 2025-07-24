@@ -23,16 +23,16 @@ st.markdown(f"""
         border-bottom: none!important;
     }}
     /* configura cor de fundo e borda */
-[data-testid="stSidebar"] {
+[data-testid="stSidebar"] {{
     background-color: {SPACE_CADET} !important;
     border-right: 2px solid {HARVEST_GOLD}22 !important;
     color: {HARVEST_GOLD} !important;  /* todo texto direto */
-}
+}}
 
 /* garante que todos os elementos FILHOS também fiquem amarelos */
-[data-testid="stSidebar"] * {
+[data-testid="stSidebar"] * {{
     color: {HARVEST_GOLD} !important;
-}
+}}
 
     .titulo-header {{
         color: {HONEYDEW};
