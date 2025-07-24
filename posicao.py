@@ -22,10 +22,18 @@ st.markdown(f"""
         min-height:0px!important;
         border-bottom: none!important;
     }}
-    [data-testid="stSidebar"] {{
-        background-color: {SPACE_CADET} !important;
-        border-right: 2px solid {HARVEST_GOLD}22 !important;
-    }}
+    /* configura cor de fundo e borda */
+[data-testid="stSidebar"] {
+    background-color: {SPACE_CADET} !important;
+    border-right: 2px solid {HARVEST_GOLD}22 !important;
+    color: {HARVEST_GOLD} !important;  /* todo texto direto */
+}
+
+/* garante que todos os elementos FILHOS também fiquem amarelos */
+[data-testid="stSidebar"] * {
+    color: {HARVEST_GOLD} !important;
+}
+
     .titulo-header {{
         color: {HONEYDEW};
         font-size: 2.1rem;
