@@ -9,8 +9,6 @@ SPACE_CADET = "#042F3C"
 HARVEST_GOLD = "#C66300"
 HONEYDEW = "#FFF4E3"
 SLATE_GRAY = "#717c89"
-VERDE = "#a4f4b8"
-VERMELHO = "#f4b4b4"
 
 # ========== CSS VISUAL ==========
 st.markdown(f"""
@@ -50,7 +48,11 @@ st.markdown(f"""
         font-size:1em !important;
         border-color: {SLATE_GRAY}30 !important;
     }}
-    .stDataFrame {{border:2px solid {SLATE_GRAY}!important; border-radius:10px!important;}}
+    .stDataFrame {{
+        border:2px solid {SLATE_GRAY}!important;
+        border-radius:10px!important;
+        min-width: 1000px !important;  /* garante largura horizontal */
+    }}
     .main .block-container {{
         max-width: 100vw!important;
     }}
@@ -81,42 +83,39 @@ def converter_valor_br(valor):
 
 # ========== SENHA ==========
 def autentica_usuario():
-    senha = st.session_state.get("senha_ok", False)
+    if "senha_ok" not in st.session_state:
+        st.session_state["senha_ok"] = False
 
-    if not senha:
+    if not st.session_state["senha_ok"]:
         st.markdown(
             f"<h3 style='color:{HARVEST_GOLD};text-align:center'>🔒 Acesso restrito</h3>",
             unsafe_allow_html=True
         )
-        senha_input = st.text_input("Digite a senha:", type="password", key="senha_input")
+        senha_input = st.text_input("Digite a senha:", type="password")
         if senha_input == "jmjp#agi@fu$obeglgct22":
             st.session_state["senha_ok"] = True
             st.success("Senha correta! Bem-vindo ao painel.")
-            return True
+            st.experimental_rerun()
         elif senha_input:
             st.error("Senha incorreta.")
-            return False
-        else:
-            return False
+        st.stop()
     else:
         st.success("Seja bem-vindo ao painel.")
-        return True
 
-if not autentica_usuario():
-    st.stop()
+autentica_usuario()
 
 # ========== HEADER ==========
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
         # Logo maior
-        st.image("imagens/Capital-branca.png", width=90)
+        st.image("imagens/Capital-branca.png", width=150)
     with cols[1]:
         st.markdown(
             f"""
             <span style='
                 color: {HONEYDEW};
-                font-size: 2.2rem;
+                font-size: 2.4rem;
                 font-weight:900;
                 border-bottom: 2px solid {HARVEST_GOLD}99;
                 padding-bottom: 0.12em;'>
@@ -173,7 +172,8 @@ contas = [
     "Disponível para operação"
 ]
 
-matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float).fillna(0.0)
+# monta a matriz só com essas linhas
+matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
 for _, linha in df_caixa_dia.iterrows():
     empresa = linha["Empresa"]
@@ -196,13 +196,21 @@ def brl(x):
     except:
         return "R$ 0,00"
 
-# Remove possíveis linhas extras com NaN
-matriz = matriz.dropna(how="all")
+# formata valores
+matriz_fmt = matriz.applymap(brl)
+
+# coloca a última linha em negrito
+def highlight_last_row(row):
+    if row.name == "Disponível para operação":
+        return ["font-weight: bold" for _ in row]
+    return ["" for _ in row]
+
+styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
 st.dataframe(
-    matriz.applymap(brl),
-    use_container_width=True,  # agora ocupa toda a largura
-    height=280,                # altura ajustada para caber sem linhas extras
+    styled,
+    use_container_width=True,  # ocupa toda a largura
+    height=260                 # altura só até a última linha
 )
 
 # ========== RODAPÉ ==========
