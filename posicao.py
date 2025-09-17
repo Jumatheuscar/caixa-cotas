@@ -5,10 +5,12 @@ import requests
 from io import StringIO
 
 # =================== CORES ===================
-SPACE_CADET = "#272846"
-HARVEST_GOLD = "#e5a125"
-HONEYDEW = "#f0f8ea"
+SPACE_CADET = "#042F3C"
+HARVEST_GOLD = "#C66300"
+HONEYDEW = "#FFF4E3"
 SLATE_GRAY = "#717c89"
+VERDE = "#a4f4b8"
+VERMELHO = "#f4b4b4"
 
 # ========== CSS VISUAL ==========
 st.markdown(f"""
@@ -23,7 +25,7 @@ st.markdown(f"""
     }}
 [data-testid="stSidebar"] {{
     background-color: {SPACE_CADET} !important;
-    border-right: 2px solid {HARVEST_GOLD}22 !important;
+    border-right: 2px solid {HARVEST_GOLD}55 !important;
     color: {HARVEST_GOLD} !important;
 }}
 [data-testid="stSidebar"] * {{
@@ -31,16 +33,16 @@ st.markdown(f"""
 }}
     h3 {{
         color: {HARVEST_GOLD}!important;
-        font-size: 1.24rem!important;
+        font-size: 1.3rem!important;
     }}
     .table-title {{
-        color: {HARVEST_GOLD}; font-size:1.1rem; font-weight:700;
+        color: {HARVEST_GOLD}; font-size:1.2rem; font-weight:700;
     }}
     .stDataFrame thead tr th {{
         background: {HARVEST_GOLD} !important;
         color: {SPACE_CADET} !important;
         font-weight:800 !important;
-        font-size:1.09em !important;
+        font-size:1.1em !important;
     }}
     .stDataFrame tbody tr td {{
         background: {SPACE_CADET} !important;
@@ -48,7 +50,7 @@ st.markdown(f"""
         font-size:1em !important;
         border-color: {SLATE_GRAY}30 !important;
     }}
-    .stDataFrame {{border:1.5px solid {SLATE_GRAY}!important; border-radius:8px!important;}}
+    .stDataFrame {{border:2px solid {SLATE_GRAY}!important; border-radius:10px!important;}}
     .main .block-container {{
         max-width: 100vw!important;
     }}
@@ -80,7 +82,7 @@ def converter_valor_br(valor):
 # ========== SENHA ==========
 def autentica_usuario():
     st.markdown(
-        "<h3 style='color:#e5a125;text-align:center'>🔒 Acesso restrito</h3>",
+        f"<h3 style='color:{HARVEST_GOLD};text-align:center'>🔒 Acesso restrito</h3>",
         unsafe_allow_html=True
     )
     senha = st.text_input("Digite a senha:", type="password")
@@ -101,18 +103,19 @@ if not autentica_usuario():
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
-        st.image("imagens/Capital-branca.png", width=55)
+        # Troca pela nova logo no repositório
+        st.image("imagens/nova_logo.png", width=65)
     with cols[1]:
         st.markdown(
             f"""
             <span style='
-                color: #f0f8ea;
-                font-size: 2.1rem;
+                color: {HONEYDEW};
+                font-size: 2.2rem;
                 font-weight:900;
-                border-bottom: 2px solid #e5a12566;
+                border-bottom: 2px solid {HARVEST_GOLD}99;
                 padding-bottom: 0.12em;'>
                 LIBRA CAPITAL
-                <span style='font-weight:400;color:#e5a125;'>| Posição Diária</span>
+                <span style='font-weight:400;color:{HARVEST_GOLD};'>| Posição Diária</span>
             </span>
             """,
             unsafe_allow_html=True
@@ -122,7 +125,7 @@ st.markdown('<br/>', unsafe_allow_html=True)
 
 # =========== SIDEBAR ============
 st.sidebar.title("FILTRAR VISUALIZAÇÃO")
-st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}22;">', unsafe_allow_html=True)
+st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}55;">', unsafe_allow_html=True)
 
 # === Leitura dos dados do Google Sheets ===
 GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
@@ -189,14 +192,13 @@ def brl(x):
 
 st.dataframe(
     matriz.applymap(brl),
-    use_container_width=False,
-    width=940,
-    height=210,
+    use_container_width=True,  # agora ocupa toda a largura
+    height=400,                # altura maior
 )
 
 # ========== RODAPÉ ==========
 st.markdown(
-    f"""<p style="text-align: right; color: {SLATE_GRAY}; font-size: 1em;">
+    f"""<p style="text-align: right; color: {HONEYDEW}; font-size: 1em;">
         Powered by Juan & Streamlit | <b style="color:{HARVEST_GOLD}">LIBRA CAPITAL</b> 🦁
     </p>""",
     unsafe_allow_html=True,
