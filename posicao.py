@@ -88,7 +88,7 @@ def autentica_usuario():
             unsafe_allow_html=True
         )
         senha_input = st.text_input("Digite a senha:", type="password")
-        if senha_input == "jmjp#agi@fu$obeglgct22":
+        if senha_input == "mesaLibra":
             st.session_state["senha_ok"] = True
             st.success("Senha correta! Bem-vindo ao painel.")
             st.rerun()
