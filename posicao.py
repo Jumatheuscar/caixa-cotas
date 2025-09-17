@@ -199,18 +199,10 @@ def brl(x):
 # Remove possíveis linhas extras com NaN
 matriz = matriz.dropna(how="all")
 
-# Estiliza linha "Disponível para operação" em negrito
-def highlight_last_row(row):
-    if row.name == "Disponível para operação":
-        return ["font-weight: bold" for _ in row]
-    return ["" for _ in row]
-
-styled = matriz.applymap(brl).style.apply(highlight_last_row, axis=1)
-
 st.dataframe(
-    styled,
-    use_container_width=True,  # ocupa toda a largura
-    height=280,                # altura ajustada
+    matriz.applymap(brl),
+    use_container_width=True,  # agora ocupa toda a largura
+    height=280,                # altura ajustada para caber sem linhas extras
 )
 
 # ========== RODAPÉ ==========
