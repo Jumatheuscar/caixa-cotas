@@ -95,7 +95,7 @@ def autentica_usuario():
         if senha_input == "mesaLibra":
             st.session_state["senha_ok"] = True
             st.success("Senha correta! Bem-vindo ao painel.")
-            st.experimental_rerun()
+            st.rerun()
         elif senha_input:
             st.error("Senha incorreta.")
         st.stop()
