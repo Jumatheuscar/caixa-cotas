@@ -286,7 +286,7 @@ if opcao == "📊 Enquadramento":
         uploaded_file = st.file_uploader("📂 Enviar planilha de estoque (Excel D-1)", type=["xlsx"])
 
         if uploaded_file:
-            df_estoque = pd.read_excel(uploaded_file)
+            df_estoque = pd.read_excel(uploaded_file, engine="openpyxl")
 
             enquadramento_cedente = calcular_enquadramento(df_estoque, pl_apuama, tipo="cedente")
             enquadramento_sacado = calcular_enquadramento(df_estoque, pl_apuama, tipo="sacado")
