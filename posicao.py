@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import datetime
 import requests
 from io import StringIO
@@ -104,7 +105,6 @@ autentica_usuario()
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
-        # Logo maior
         st.image("imagens/Capital-branca.png", width=220, output_format="PNG")
     with cols[1]:
         st.markdown(
@@ -116,7 +116,7 @@ with st.container():
                 border-bottom: 2px solid {HARVEST_GOLD}99;
                 padding-bottom: 0.12em;'>
                 LIBRA CAPITAL
-                <span style='font-weight:400;color:{HARVEST_GOLD};'>| Posição Diária</span>
+                <span style='font-weight:400;color:{HARVEST_GOLD};'>| Painel</span>
             </span>
             """,
             unsafe_allow_html=True
@@ -124,95 +124,166 @@ with st.container():
 
 st.markdown('<br/>', unsafe_allow_html=True)
 
-# =========== SIDEBAR ============
-st.sidebar.title("FILTRAR VISUALIZAÇÃO")
-st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}55;">', unsafe_allow_html=True)
-
-# === Leitura dos dados do Google Sheets ===
-GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
-url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
-
-r_caixa = requests.get(url_caixa)
-r_caixa.raise_for_status()
-df_caixa = pd.read_csv(StringIO(r_caixa.text))
-
-df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
-
-# === DATA DO CAIXA ===
-datas_caixa = sorted(df_caixa["Data"].dropna().unique())
-default_caixa = max(datas_caixa)
-data_caixa_sel = st.sidebar.date_input(
-    "Data do Caixa",
-    value=default_caixa,
-    min_value=min(datas_caixa),
-    max_value=default_caixa,
-    format="DD/MM/YYYY"
+# =========================================================
+# SIDEBAR MENU
+# =========================================================
+opcao = st.sidebar.radio(
+    "Selecione o painel:",
+    ["💰 Caixa", "📊 Enquadramento"]
 )
 
-if hasattr(data_caixa_sel, "to_pydatetime"):
-    data_caixa_sel = data_caixa_sel.to_pydatetime()
+# =========================================================
+# PAINEL: CAIXA
+# =========================================================
+if opcao == "💰 Caixa":
+    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+    url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
 
-data_caixa_br = data_caixa_sel.strftime("%d/%m/%Y")
-df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
+    r_caixa = requests.get(url_caixa)
+    r_caixa.raise_for_status()
+    df_caixa = pd.read_csv(StringIO(r_caixa.text))
+    df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 
-# ========== SEÇÃO CAIXA ==========
-st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
-st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
+    datas_caixa = sorted(df_caixa["Data"].dropna().unique())
+    default_caixa = max(datas_caixa)
+    data_caixa_sel = st.sidebar.date_input(
+        "Data do Caixa",
+        value=default_caixa,
+        min_value=min(datas_caixa),
+        max_value=default_caixa,
+        format="DD/MM/YYYY"
+    )
 
-# Empresas sem "libra sec 40" e "libra sec 60"
-empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
-contas = [
-    "Conta recebimento",
-    "Conta de conciliação", 
-    "Reserva de caixa",
-    "Conta pgto",
-    "Disponível para operação"
-]
+    if hasattr(data_caixa_sel, "to_pydatetime"):
+        data_caixa_sel = data_caixa_sel.to_pydatetime()
 
-matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
+    data_caixa_br = data_caixa_sel.strftime("%d/%m/%Y")
+    df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 
-for _, linha in df_caixa_dia.iterrows():
-    empresa = linha["Empresa"]
-    if empresa in empresas:
-        conta_receb = converter_valor_br(linha["Conta recebimento"])
-        conta_conc = converter_valor_br(linha["Conta de conciliação"])
-        reserva = converter_valor_br(linha["Reserva"])
-        conta_pgto = converter_valor_br(linha["Conta pgto"])
-        disponivel = conta_pgto - reserva
+    st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
+    st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-        matriz.at["Conta recebimento", empresa] = conta_receb
-        matriz.at["Conta de conciliação", empresa] = conta_conc
-        matriz.at["Reserva de caixa", empresa] = reserva
-        matriz.at["Conta pgto", empresa] = conta_pgto
-        matriz.at["Disponível para operação", empresa] = disponivel
+    empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
+    contas = [
+        "Conta recebimento",
+        "Conta de conciliação", 
+        "Reserva de caixa",
+        "Conta pgto",
+        "Disponível para operação"
+    ]
 
-def brl(x):
-    try:
-        return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "R$ 0,00"
+    matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
-# formata valores
-matriz_fmt = matriz.applymap(brl)
+    for _, linha in df_caixa_dia.iterrows():
+        empresa = linha["Empresa"]
+        if empresa in empresas:
+            conta_receb = converter_valor_br(linha["Conta recebimento"])
+            conta_conc = converter_valor_br(linha["Conta de conciliação"])
+            reserva = converter_valor_br(linha["Reserva"])
+            conta_pgto = converter_valor_br(linha["Conta pgto"])
+            disponivel = conta_pgto - reserva
 
-# remove linhas completamente vazias
-matriz_fmt = matriz_fmt.dropna(how="all")
+            matriz.at["Conta recebimento", empresa] = conta_receb
+            matriz.at["Conta de conciliação", empresa] = conta_conc
+            matriz.at["Reserva de caixa", empresa] = reserva
+            matriz.at["Conta pgto", empresa] = conta_pgto
+            matriz.at["Disponível para operação", empresa] = disponivel
 
-# coloca a última linha em negrito
-def highlight_last_row(row):
-    if row.name == "Disponível para operação":
-        return ["font-weight: bold" for _ in row]
-    return ["" for _ in row]
+    def brl(x):
+        try:
+            return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return "R$ 0,00"
 
-styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
+    matriz_fmt = matriz.applymap(brl)
+    matriz_fmt = matriz_fmt.dropna(how="all")
 
-st.dataframe(
-    styled,
-    use_container_width=True,
-    height=(40 * len(matriz_fmt) + 60)  # altura ajustada ao nº de linhas
-)
+    def highlight_last_row(row):
+        if row.name == "Disponível para operação":
+            return ["font-weight: bold" for _ in row]
+        return ["" for _ in row]
 
-# ========== RODAPÉ ==========
+    styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
+
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=(40 * len(matriz_fmt) + 60)
+    )
+
+# =========================================================
+# PAINEL: ENQUADRAMENTO
+# =========================================================
+if opcao == "📊 Enquadramento":
+
+    def carregar_pl(sheet_id, aba, data_ref):
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={aba}"
+        r = requests.get(url)
+        r.raise_for_status()
+        df_pl = pd.read_csv(StringIO(r.text))
+        df_pl.iloc[:, 0] = pd.to_datetime(df_pl.iloc[:, 0], dayfirst=True, errors="coerce")
+        df_pl = df_pl[df_pl.iloc[:, 0] <= pd.to_datetime(data_ref)]
+        if df_pl.empty:
+            return None
+        pl_valor = df_pl.iloc[-1, 10]  # coluna K
+        return float(str(pl_valor).replace(",", ".").replace(" ", ""))
+
+    def calcular_enquadramento(df, pl, tipo="cedente"):
+        if tipo == "cedente":
+            agrupado = df.groupby(
+                ["NOME_CEDENTE", "DOC_CEDENTE"], as_index=False
+            )["VALOR_NOMINAL"].sum()
+            agrupado.rename(columns={
+                "NOME_CEDENTE": "Nome",
+                "DOC_CEDENTE": "Documento",
+                "VALOR_NOMINAL": "Valor Total"
+            }, inplace=True)
+        else:
+            agrupado = df.groupby(
+                ["NOME_SACADO", "DOC_SACADO"], as_index=False
+            )["VALOR_NOMINAL"].sum()
+            agrupado.rename(columns={
+                "NOME_SACADO": "Nome",
+                "DOC_SACADO": "Documento",
+                "VALOR_NOMINAL": "Valor Total"
+            }, inplace=True)
+
+        agrupado["%PL"] = (agrupado["Valor Total"] / pl) * 100
+        agrupado["Enquadramento"] = np.where(
+            agrupado["%PL"] > 10, "Não enquadrado", "Enquadrado"
+        )
+        return agrupado.sort_values(by="%PL", ascending=False)
+
+    st.title("📊 Enquadramento Cedentes e Sacados")
+
+    hoje = datetime.date.today()
+    data_estoque = hoje - datetime.timedelta(days=1)
+    data_pl = hoje - datetime.timedelta(days=2)
+
+    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+    pl_apuama = carregar_pl(GOOGLE_SHEET_ID, "Dre_Apuama", data_pl)
+
+    if not pl_apuama:
+        st.error("Não foi possível encontrar PL para a data de referência.")
+    else:
+        st.markdown(f"**PL usado (Apuama - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_apuama:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+        # ⚠️ Ajustar caminho dinamicamente para estoque real
+        caminho_estoque = fr"G:\Drives compartilhados\1. FIDC\3. FIDC APUAMA\FINANCEIRO - APUAMA LIBRA\ESTOQUE\{data_estoque:%Y}\{data_estoque:%Y.%m}\{data_estoque:%Y.%m.%d}\51646633000102_Estoque_APUAMA LIBRA FIDC_001.xlsx"
+        df_estoque = pd.read_excel(caminho_estoque)
+
+        enquadramento_cedente = calcular_enquadramento(df_estoque, pl_apuama, tipo="cedente")
+        enquadramento_sacado = calcular_enquadramento(df_estoque, pl_apuama, tipo="sacado")
+
+        st.subheader("Cedentes")
+        st.dataframe(enquadramento_cedente, use_container_width=True)
+
+        st.subheader("Sacados")
+        st.dataframe(enquadramento_sacado, use_container_width=True)
+
+# =========================================================
+# RODAPÉ
+# =========================================================
 st.markdown(
     f"""<p style="text-align: right; color: {HONEYDEW}; font-size: 1em;">
         Powered by Juan & Streamlit | <b style="color:{HARVEST_GOLD}">LIBRA CAPITAL</b> 🦁
