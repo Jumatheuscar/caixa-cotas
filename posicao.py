@@ -77,13 +77,6 @@ def converter_valor_br(valor):
     except:
         return 0.0
 
-# Função para formatar em BRL
-def brl(x):
-    try:
-        return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "R$ 0,00"
-
 # ========== SENHA ==========
 def autentica_usuario():
     if "senha_ok" not in st.session_state:
@@ -111,6 +104,7 @@ autentica_usuario()
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
+        # Logo maior
         st.image("imagens/Capital-branca.png", width=220, output_format="PNG")
     with cols[1]:
         st.markdown(
@@ -140,18 +134,21 @@ url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?t
 url_apuama = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dre_Apuama"
 
 r_caixa = requests.get(url_caixa)
+r_caixa.raise_for_status()
 df_caixa = pd.read_csv(StringIO(r_caixa.text))
-df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 
 r_apuama = requests.get(url_apuama)
+r_apuama.raise_for_status()
 df_apuama = pd.read_csv(StringIO(r_apuama.text))
-df_apuama["Data"] = pd.to_datetime(df_apuama["Data"], dayfirst=True, errors="coerce")
 
-# ========== TABS ==========
-tab1, tab2 = st.tabs(["💰 Caixa", "📊 Enquadramento"])
+df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 
-# --------- TAB 1: CAIXA ---------
-with tab1:
+# Tabs principais
+aba = st.tabs(["📊 Caixa", "📈 Enquadramento"])
+
+# ========== SEÇÃO CAIXA ==========
+with aba[0]:
+    # === DATA DO CAIXA ===
     datas_caixa = sorted(df_caixa["Data"].dropna().unique())
     default_caixa = max(datas_caixa)
     data_caixa_sel = st.sidebar.date_input(
@@ -171,8 +168,15 @@ with tab1:
     st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
+    # Empresas sem "libra sec 40" e "libra sec 60"
     empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
-    contas = ["Conta recebimento","Conta de conciliação","Reserva de caixa","Conta pgto","Disponível para operação"]
+    contas = [
+        "Conta recebimento",
+        "Conta de conciliação", 
+        "Reserva de caixa",
+        "Conta pgto",
+        "Disponível para operação"
+    ]
 
     matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
@@ -191,8 +195,19 @@ with tab1:
             matriz.at["Conta pgto", empresa] = conta_pgto
             matriz.at["Disponível para operação", empresa] = disponivel
 
-    matriz_fmt = matriz.applymap(brl).dropna(how="all")
+    def brl(x):
+        try:
+            return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return "R$ 0,00"
 
+    # formata valores
+    matriz_fmt = matriz.applymap(brl)
+
+    # remove linhas completamente vazias
+    matriz_fmt = matriz_fmt.dropna(how="all")
+
+    # coloca a última linha em negrito
     def highlight_last_row(row):
         if row.name == "Disponível para operação":
             return ["font-weight: bold" for _ in row]
@@ -200,45 +215,83 @@ with tab1:
 
     styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
-    st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=(40 * len(matriz_fmt) + 60)
+    )
 
-# --------- TAB 2: ENQUADRAMENTO ---------
-with tab2:
-    st.markdown("<h3>📊 Enquadramento Cedentes e Sacados</h3>", unsafe_allow_html=True)
+# ========== SEÇÃO ENQUADRAMENTO ==========
+with aba[1]:
+    st.markdown("### 📊 Enquadramento Cedentes e Sacados")
 
+    # Corrigir PL TOTAL para número
+    df_apuama["PL TOTAL"] = (
+        df_apuama["PL TOTAL"]
+        .astype(str)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+        .astype(float)
+    )
+
+    # Último PL válido
     pl_valor = df_apuama.dropna(subset=["PL TOTAL"]).iloc[-1]["PL TOTAL"]
-    st.markdown(f"**PL usado (Apuama - {df_apuama.iloc[-1]['Data'].strftime('%d/%m/%Y')}):** {brl(pl_valor)}")
+    data_pl = df_apuama.dropna(subset=["PL TOTAL"]).iloc[-1]["Data"]
+
+    def brl(x):
+        try:
+            return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return "R$ 0,00"
+
+    st.markdown(f"**PL usado (Apuama - {pd.to_datetime(data_pl).strftime('%d/%m/%Y')}):** {brl(pl_valor)}")
 
     uploaded_file = st.file_uploader("📂 Enviar planilha de estoque (Excel D-1)", type=["xlsx"])
 
-    if uploaded_file is not None:
-        df_estoque = pd.read_excel(uploaded_file, engine="openpyxl")
+    if uploaded_file:
+        df_estoque = pd.read_excel(uploaded_file)
 
         # Cedentes
-        cedentes = df_estoque.groupby(["NOME_CEDENTE", "DOC_CEDENTE"], as_index=False)["VALOR_NOMINAL"].sum()
-        cedentes["%PL"] = (cedentes["VALOR_NOMINAL"] / float(pl_valor)) * 100
-        cedentes["Enquadramento"] = cedentes["%PL"].apply(lambda x: "Excedido" if x > 10 else "Enquadrado")
+        df_cedentes = (
+            df_estoque.groupby(["NOME_CEDENTE", "DOC_CEDENTE"])["VALOR_NOMINAL"]
+            .sum()
+            .reset_index()
+        )
+        df_cedentes = df_cedentes.rename(columns={
+            "NOME_CEDENTE": "Nome",
+            "DOC_CEDENTE": "Documento",
+            "VALOR_NOMINAL": "Valor Total"
+        })
+        df_cedentes["%PL"] = df_cedentes["Valor Total"] / pl_valor * 100
+        df_cedentes["Enquadrado"] = df_cedentes["%PL"] <= 10
 
-        df_cedentes_fmt = cedentes.rename(columns={
-            "NOME_CEDENTE": "Nome","DOC_CEDENTE": "Documento","VALOR_NOMINAL": "Valor Total"})
-        df_cedentes_fmt["Valor Total"] = df_cedentes_fmt["Valor Total"].apply(brl)
-        df_cedentes_fmt["%PL"] = df_cedentes_fmt["%PL"].apply(lambda x: f"{x:.2f}%")
+        df_cedentes["Valor Total"] = df_cedentes["Valor Total"].apply(brl)
+        df_cedentes["%PL"] = df_cedentes["%PL"].map(lambda x: f"{x:.2f}%")
+        df_cedentes["Enquadrado"] = df_cedentes["Enquadrado"].map(lambda x: "✅ Enquadrado" if x else "❌ Fora")
+
+        st.markdown("#### Cedentes")
+        st.dataframe(df_cedentes, use_container_width=True, height=400)
 
         # Sacados
-        sacados = df_estoque.groupby(["NOME_SACADO", "DOC_SACADO"], as_index=False)["VALOR_NOMINAL"].sum()
-        sacados["%PL"] = (sacados["VALOR_NOMINAL"] / float(pl_valor)) * 100
-        sacados["Enquadramento"] = sacados["%PL"].apply(lambda x: "Excedido" if x > 10 else "Enquadrado")
+        df_sacados = (
+            df_estoque.groupby(["NOME_SACADO", "DOC_SACADO"])["VALOR_NOMINAL"]
+            .sum()
+            .reset_index()
+        )
+        df_sacados = df_sacados.rename(columns={
+            "NOME_SACADO": "Nome",
+            "DOC_SACADO": "Documento",
+            "VALOR_NOMINAL": "Valor Total"
+        })
+        df_sacados["%PL"] = df_sacados["Valor Total"] / pl_valor * 100
+        df_sacados["Enquadrado"] = df_sacados["%PL"] <= 10
 
-        df_sacados_fmt = sacados.rename(columns={
-            "NOME_SACADO": "Nome","DOC_SACADO": "Documento","VALOR_NOMINAL": "Valor Total"})
-        df_sacados_fmt["Valor Total"] = df_sacados_fmt["Valor Total"].apply(brl)
-        df_sacados_fmt["%PL"] = df_sacados_fmt["%PL"].apply(lambda x: f"{x:.2f}%")
+        df_sacados["Valor Total"] = df_sacados["Valor Total"].apply(brl)
+        df_sacados["%PL"] = df_sacados["%PL"].map(lambda x: f"{x:.2f}%")
+        df_sacados["Enquadrado"] = df_sacados["Enquadrado"].map(lambda x: "✅ Enquadrado" if x else "❌ Fora")
 
-        st.markdown("**Cedentes**")
-        st.dataframe(df_cedentes_fmt.sort_values("%PL", ascending=False), use_container_width=True, height=(40 * len(df_cedentes_fmt) + 80))
-
-        st.markdown("**Sacados**")
-        st.dataframe(df_sacados_fmt.sort_values("%PL", ascending=False), use_container_width=True, height=(40 * len(df_sacados_fmt) + 80))
+        st.markdown("#### Sacados")
+        st.dataframe(df_sacados, use_container_width=True, height=400)
 
 # ========== RODAPÉ ==========
 st.markdown(
