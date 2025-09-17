@@ -48,11 +48,7 @@ st.markdown(f"""
         font-size:1em !important;
         border-color: {SLATE_GRAY}30 !important;
     }}
-    .stDataFrame {{
-        border:2px solid {SLATE_GRAY}!important;
-        border-radius:10px!important;
-        min-width: 1000px !important;  /* garante largura horizontal */
-    }}
+    .stDataFrame {{border:2px solid {SLATE_GRAY}!important; border-radius:10px!important;}}
     .main .block-container {{
         max-width: 100vw!important;
     }}
@@ -92,7 +88,7 @@ def autentica_usuario():
             unsafe_allow_html=True
         )
         senha_input = st.text_input("Digite a senha:", type="password")
-        if senha_input == "mesaLibra":
+        if senha_input == "jmjp#agi@fu$obeglgct22":
             st.session_state["senha_ok"] = True
             st.success("Senha correta! Bem-vindo ao painel.")
             st.rerun()
@@ -163,7 +159,8 @@ df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-empresas = ["Apuama", "Bristol", "Consignado", "libra sec 40", "libra sec 60", "Tractor"]
+# Empresas sem "libra sec 40" e "libra sec 60"
+empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
 contas = [
     "Conta recebimento",
     "Conta de conciliação", 
@@ -172,7 +169,6 @@ contas = [
     "Disponível para operação"
 ]
 
-# monta a matriz só com essas linhas
 matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
 for _, linha in df_caixa_dia.iterrows():
@@ -209,8 +205,8 @@ styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
 st.dataframe(
     styled,
-    use_container_width=True,  # ocupa toda a largura
-    height=260                 # altura só até a última linha
+    use_container_width=True,
+    height=280  # altura normal, sem linhas extras
 )
 
 # ========== RODAPÉ ==========
