@@ -222,14 +222,12 @@ if opcao == "📊 Enquadramento":
         r.raise_for_status()
         df_pl = pd.read_csv(StringIO(r.text))
 
-        # Coluna 0 = Data, Coluna 10 (K) = PL TOTAL
         df_pl.iloc[:, 0] = pd.to_datetime(df_pl.iloc[:, 0], dayfirst=True, errors="coerce")
         df_pl = df_pl[df_pl.iloc[:, 0] <= pd.to_datetime(data_ref)]
 
         if df_pl.empty:
             return None, None
 
-        # Busca de trás pra frente até achar PL válido
         for i in range(len(df_pl) - 1, -1, -1):
             pl_valor = df_pl.iloc[i, 10]
             data_pl_efetiva = df_pl.iloc[i, 0]
@@ -275,7 +273,6 @@ if opcao == "📊 Enquadramento":
     st.title("📊 Enquadramento Cedentes e Sacados")
 
     hoje = datetime.date.today()
-    data_estoque = hoje - datetime.timedelta(days=1)
     data_pl = hoje - datetime.timedelta(days=2)
 
     GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
@@ -286,18 +283,21 @@ if opcao == "📊 Enquadramento":
     else:
         st.markdown(f"**PL usado (Apuama - {data_pl_efetiva.strftime('%d/%m/%Y')}):** R$ {pl_apuama:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-        # ⚠️ Ajustar caminho dinamicamente para estoque real
-        caminho_estoque = fr"G:\Drives compartilhados\1. FIDC\3. FIDC APUAMA\FINANCEIRO - APUAMA LIBRA\ESTOQUE\{data_estoque:%Y}\{data_estoque:%Y.%m}\{data_estoque:%Y.%m.%d}\51646633000102_Estoque_APUAMA LIBRA FIDC_001.xlsx"
-        df_estoque = pd.read_excel(caminho_estoque)
+        uploaded_file = st.file_uploader("📂 Enviar planilha de estoque (Excel D-1)", type=["xlsx"])
 
-        enquadramento_cedente = calcular_enquadramento(df_estoque, pl_apuama, tipo="cedente")
-        enquadramento_sacado = calcular_enquadramento(df_estoque, pl_apuama, tipo="sacado")
+        if uploaded_file:
+            df_estoque = pd.read_excel(uploaded_file)
 
-        st.subheader("Cedentes")
-        st.dataframe(enquadramento_cedente, use_container_width=True)
+            enquadramento_cedente = calcular_enquadramento(df_estoque, pl_apuama, tipo="cedente")
+            enquadramento_sacado = calcular_enquadramento(df_estoque, pl_apuama, tipo="sacado")
 
-        st.subheader("Sacados")
-        st.dataframe(enquadramento_sacado, use_container_width=True)
+            st.subheader("Cedentes")
+            st.dataframe(enquadramento_cedente, use_container_width=True)
+
+            st.subheader("Sacados")
+            st.dataframe(enquadramento_sacado, use_container_width=True)
+        else:
+            st.info("Faça upload da planilha de estoque (Excel) para calcular o enquadramento.")
 
 # =========================================================
 # RODAPÉ
