@@ -9,6 +9,8 @@ SPACE_CADET = "#042F3C"
 HARVEST_GOLD = "#C66300"
 HONEYDEW = "#FFF4E3"
 SLATE_GRAY = "#717c89"
+VERDE = "#4CAF50"
+VERMELHO = "#E53935"
 
 # ========== CSS VISUAL ==========
 st.markdown(f"""
@@ -21,14 +23,6 @@ st.markdown(f"""
         min-height:0px!important;
         border-bottom: none!important;
     }}
-[data-testid="stSidebar"] {{
-    background-color: {SPACE_CADET} !important;
-    border-right: 2px solid {HARVEST_GOLD}55 !important;
-    color: {HARVEST_GOLD} !important;
-}}
-[data-testid="stSidebar"] * {{
-    color: {HARVEST_GOLD} !important;
-}}
     h3 {{
         color: {HARVEST_GOLD}!important;
         font-size: 1.3rem!important;
@@ -52,10 +46,22 @@ st.markdown(f"""
     .main .block-container {{
         max-width: 100vw!important;
     }}
+    .stDataFrame, .st-emotion-cache-1djdyxw {{
+        width: 100% !important;
+        overflow-x: auto !important;
+    }}
+    .indicador {{
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        text-align: center;
+        margin: 5px;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# ========== FUNÇÃO PARA CONVERTER VALORES BRASILEIROS ==========
+# ========== FUNÇÃO PARA CONVERTER VALORES ==========
 def converter_valor_br(valor):
     if pd.isna(valor) or valor == "" or valor is None:
         return 0.0
@@ -81,7 +87,7 @@ def brl(x):
     try:
         return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
-        return x
+        return "R$ 0,00"
 
 # ========== SENHA ==========
 def autentica_usuario():
@@ -129,41 +135,28 @@ with st.container():
 
 st.markdown('<br/>', unsafe_allow_html=True)
 
-# =========== SIDEBAR ============
-st.sidebar.title("FILTRAR VISUALIZAÇÃO")
-st.sidebar.markdown(f'<hr style="border-color:{HARVEST_GOLD}55;">', unsafe_allow_html=True)
-
-aba = st.sidebar.radio("Selecione o painel:", ["💰 Caixa", "📊 Enquadramento"])
-
-# === Leitura dos dados do Google Sheets ===
-GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
-url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
-url_apuama = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dre_Apuama"
-
-r_caixa = requests.get(url_caixa)
-r_caixa.raise_for_status()
-df_caixa = pd.read_csv(StringIO(r_caixa.text))
-df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
-
-r_apuama = requests.get(url_apuama)
-r_apuama.raise_for_status()
-df_apuama = pd.read_csv(StringIO(r_apuama.text))
-df_apuama["Data"] = pd.to_datetime(df_apuama["Data"], dayfirst=True, errors="coerce")
-
-# Corrigir PL TOTAL para número
-df_apuama["PL TOTAL"] = (
-    df_apuama["PL TOTAL"]
-    .astype(str)
-    .str.replace(".", "", regex=False)
-    .str.replace(",", ".", regex=False)
-    .astype(float)
+# ========== ABAS ==========
+aba = st.radio(
+    "Selecione o painel:",
+    ["💰 Caixa", "📊 Enquadramento"],
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
-# ========== ABA CAIXA ==========
+# =================== CAIXA ===================
 if aba == "💰 Caixa":
+    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+    url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
+
+    r_caixa = requests.get(url_caixa)
+    r_caixa.raise_for_status()
+    df_caixa = pd.read_csv(StringIO(r_caixa.text))
+
+    df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
+
     datas_caixa = sorted(df_caixa["Data"].dropna().unique())
     default_caixa = max(datas_caixa)
-    data_caixa_sel = st.sidebar.date_input(
+    data_caixa_sel = st.date_input(
         "Data do Caixa",
         value=default_caixa,
         min_value=min(datas_caixa),
@@ -215,92 +208,85 @@ if aba == "💰 Caixa":
 
     styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
-    st.dataframe(
-        styled,
-        use_container_width=True,
-        height=(40 * len(matriz_fmt) + 60)
-    )
+    st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
 
-# ========== ABA ENQUADRAMENTO ==========
+# =================== ENQUADRAMENTO ===================
 if aba == "📊 Enquadramento":
-    st.markdown("<h3>Enquadramento - Cedentes e Sacados (Apuama)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>📊 Enquadramento - Cedentes e Sacados (Apuama)</h3>", unsafe_allow_html=True)
 
-    # Último PL válido
-    pl_valor = df_apuama.dropna(subset=["PL TOTAL"]).iloc[-1]["PL TOTAL"]
-    data_pl = df_apuama.dropna(subset=["PL TOTAL"]).iloc[-1]["Data"]
-    st.markdown(f"**PL usado (Apuama - {data_pl.strftime('%d/%m/%Y')}):** {brl(pl_valor)}")
+    # Carregar PL da aba Dre_Apuama
+    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+    url_dre_apuama = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dre_Apuama"
+    r_dre = requests.get(url_dre_apuama)
+    r_dre.raise_for_status()
+    df_dre = pd.read_csv(StringIO(r_dre.text))
 
-    uploaded_file = st.file_uploader("Envie o arquivo de estoque (Excel)", type=["xlsx"])
-    if uploaded_file is not None:
-        df_estoque = pd.read_excel(uploaded_file, engine="openpyxl")
+    df_dre["Data"] = pd.to_datetime(df_dre["Data"], dayfirst=True, errors="coerce")
+    df_dre = df_dre.dropna(subset=["PL TOTAL"])
+    pl_apuama = df_dre.iloc[-1]["PL TOTAL"]
 
-        # Ajuste de Cedentes especiais → substitui pelo Sacado
-        cedentes_especiais = [
+    st.markdown(f"<b>PL usado (Apuama - {df_dre.iloc[-1]['Data'].strftime('%d/%m/%Y')}):</b> {brl(pl_apuama)}", unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader("📂 Envie o arquivo de estoque (Excel)", type=["xlsx"])
+    if uploaded_file:
+        df_estoque = pd.read_excel(uploaded_file)
+
+        condicoes = [
             "UY3 SOCIEDADE DE CREDITO DIRETO S/ A",
             "MONEY PLUS SOCIEDADE DE CREDITO AO MICROEMPREENDED",
             "MONEY PLUS SOCIEDADE DE CREDITO AO MICRO"
         ]
-
-        df_estoque["CEDENTE_AJUSTADO"] = df_estoque.apply(
-            lambda row: row["NOME_SACADO"] if row["NOME_CEDENTE"] in cedentes_especiais else row["NOME_CEDENTE"],
-            axis=1
-        )
-        df_estoque["DOC_CEDENTE_AJUSTADO"] = df_estoque.apply(
-            lambda row: row["DOC_SACADO"] if row["NOME_CEDENTE"] in cedentes_especiais else row["DOC_CEDENTE"],
+        df_estoque["NOME_CEDENTE"] = df_estoque.apply(
+            lambda x: x["NOME_SACADO"] if x["NOME_CEDENTE"] in condicoes else x["NOME_CEDENTE"],
             axis=1
         )
 
         # Cedentes
-        df_cedentes = df_estoque.groupby(
-            ["CEDENTE_AJUSTADO", "DOC_CEDENTE_AJUSTADO"], as_index=False
-        )["VALOR_NOMINAL"].sum().rename(columns={
-            "CEDENTE_AJUSTADO": "Cedente",
-            "DOC_CEDENTE_AJUSTADO": "CNPJ",
-            "VALOR_NOMINAL": "Valor Total"
-        })
-        df_cedentes["%PL"] = (df_cedentes["Valor Total"] / pl_valor) * 100
-        df_cedentes = df_cedentes.sort_values(by="%PL", ascending=False)
+        df_cedentes = df_estoque.groupby(["NOME_CEDENTE", "DOC_CEDENTE"], as_index=False)["VALOR_NOMINAL"].sum()
+        df_cedentes.rename(columns={"NOME_CEDENTE": "Cedente", "DOC_CEDENTE": "CNPJ", "VALOR_NOMINAL": "Valor Total"}, inplace=True)
+        df_cedentes["%PL"] = df_cedentes["Valor Total"] / pl_apuama * 100
+        df_cedentes["Enq."] = df_cedentes["%PL"].apply(lambda x: "✅ Enq." if x <= 10 else "❌ Fora")
+        df_cedentes = df_cedentes.sort_values(by="Valor Total", ascending=False)
+
+        maior_ced = df_cedentes["%PL"].max()
+        top5_ced = df_cedentes["%PL"].nlargest(5).sum()
 
         # Sacados
-        df_sacados = df_estoque.groupby(
-            ["NOME_SACADO", "DOC_SACADO"], as_index=False
-        )["VALOR_NOMINAL"].sum().rename(columns={
-            "NOME_SACADO": "Sacado",
-            "DOC_SACADO": "CNPJ",
-            "VALOR_NOMINAL": "Valor Total"
-        })
-        df_sacados["%PL"] = (df_sacados["Valor Total"] / pl_valor) * 100
-        df_sacados = df_sacados.sort_values(by="%PL", ascending=False)
+        df_sacados = df_estoque.groupby(["NOME_SACADO", "DOC_SACADO"], as_index=False)["VALOR_NOMINAL"].sum()
+        df_sacados.rename(columns={"NOME_SACADO": "Sacado", "DOC_SACADO": "CNPJ", "VALOR_NOMINAL": "Valor Total"}, inplace=True)
+        df_sacados["%PL"] = df_sacados["Valor Total"] / pl_apuama * 100
+        df_sacados["Enq."] = df_sacados["%PL"].apply(lambda x: "✅ Enq." if x <= 10 else "❌ Fora")
+        df_sacados = df_sacados.sort_values(by="Valor Total", ascending=False)
 
-        # Formatação Cedentes
-        df_cedentes_fmt = df_cedentes.copy()
-        df_cedentes_fmt["Valor Total"] = df_cedentes_fmt["Valor Total"].apply(brl)
-        df_cedentes_fmt["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
-        df_cedentes_fmt["Enquadramento"] = df_cedentes["%PL"].apply(
-            lambda x: "✅ Enquadrado" if x <= 10 else "❌ Não enquadrado"
-        )
+        maior_sac = df_sacados["%PL"].max()
+        top5_sac = df_sacados["%PL"].nlargest(5).sum()
 
-        # Formatação Sacados
-        df_sacados_fmt = df_sacados.copy()
-        df_sacados_fmt["Valor Total"] = df_sacados_fmt["Valor Total"].apply(brl)
-        df_sacados_fmt["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
-        df_sacados_fmt["Enquadramento"] = df_sacados["%PL"].apply(
-            lambda x: "✅ Enquadrado" if x <= 10 else "❌ Não enquadrado"
-        )
+        # Mostrar indicadores estilizados
+        st.markdown("### 🔎 Indicadores")
+        col1, col2, col3, col4 = st.columns(4)
+
+        def indicador_html(label, valor, limite):
+            cor = VERDE if valor <= limite else VERMELHO
+            return f"<div class='indicador' style='background:{cor}33; color:{cor}'>{label}<br>{valor:.2f}%</div>"
+
+        col1.markdown(indicador_html("Maior Cedente", maior_ced, 10), unsafe_allow_html=True)
+        col2.markdown(indicador_html("Top 5 Cedentes", top5_ced, 40), unsafe_allow_html=True)
+        col3.markdown(indicador_html("Maior Sacado", maior_sac, 10), unsafe_allow_html=True)
+        col4.markdown(indicador_html("Top 5 Sacados", top5_sac, 40), unsafe_allow_html=True)
+
+        # Formatando Cedentes
+        df_cedentes["Valor Total"] = df_cedentes["Valor Total"].apply(brl)
+        df_cedentes["%PL"] = df_cedentes["%PL"].map(lambda x: f"{x:.2f}%")
 
         st.markdown("### Cedentes")
-        st.dataframe(
-            df_cedentes_fmt,
-            use_container_width=True,
-            height=(40 * len(df_cedentes_fmt) + 80)
-        )
+        st.dataframe(df_cedentes, use_container_width=True, height=400)
+
+        # Formatando Sacados
+        df_sacados["Valor Total"] = df_sacados["Valor Total"].apply(brl)
+        df_sacados["%PL"] = df_sacados["%PL"].map(lambda x: f"{x:.2f}%")
 
         st.markdown("### Sacados")
-        st.dataframe(
-            df_sacados_fmt,
-            use_container_width=True,
-            height=(40 * len(df_sacados_fmt) + 80)
-        )
+        st.dataframe(df_sacados, use_container_width=True, height=400)
 
 # ========== RODAPÉ ==========
 st.markdown(
