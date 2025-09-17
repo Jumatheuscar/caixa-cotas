@@ -132,7 +132,6 @@ aba = st.tabs(["🍯 Caixa", "📊 Enquadramento"])
 with aba[0]:
     st.markdown("<h3>Caixa</h3>", unsafe_allow_html=True)
 
-    # === Leitura dos dados do Google Sheets ===
     GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
     url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
 
@@ -212,20 +211,19 @@ with aba[0]:
 with aba[1]:
     st.markdown("### 📊 Enquadramento - Cedentes e Sacados (Apuama)")
 
-    # === Upload do estoque (Excel) ===
     uploaded_file = st.file_uploader("Envie o arquivo de estoque (Excel)", type=["xlsx"])
     if uploaded_file is not None:
         df_estoque = pd.read_excel(uploaded_file)
 
-        # Ajusta colunas
         df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
-            "DOC_CEDENTE": "CNPJ",
+            "DOC_CEDENTE": "CNPJ_Cedente",
             "NOME_SACADO": "Sacado",
+            "DOC_SACADO": "CNPJ_Sacado",
             "VALOR_NOMINAL": "Valor"
         })
 
-        # Carrega PL do Google Sheets
+        # PL
         url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dre_Apuama"
         r_pl = requests.get(url_pl)
         r_pl.raise_for_status()
@@ -233,23 +231,47 @@ with aba[1]:
         df_pl["Data"] = pd.to_datetime(df_pl["Data"], dayfirst=True, errors="coerce")
 
         data_pl = df_pl["Data"].max()
-        pl_apuama = df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0]
-        pl_apuama = converter_valor_br(pl_apuama)
+        pl_apuama = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
 
         st.markdown(f"**PL usado (Apuama - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_apuama:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-        # Agrupamento Cedentes
-        df_cedentes = df_estoque.groupby(["Cedente", "CNPJ"], as_index=False)["Valor"].sum()
+        # Cedentes
+        df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
         df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_apuama) * 100
         df_cedentes["Enquadrado"] = df_cedentes["%PL"].apply(lambda x: "✅" if x <= 10 else "❌")
         df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
-        # Formatação
+        # Indicadores Cedentes
+        maior_cedente = df_cedentes.iloc[0]
+        top5_cedentes = df_cedentes.head(5)["%PL"].sum()
+
+        st.metric("Maior Cedente", f"{maior_cedente['Cedente']} ({maior_cedente['%PL']:.2f}%)")
+        st.metric("Top 5 Cedentes", f"{top5_cedentes:.2f}%")
+
         df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         df_cedentes["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
 
         st.markdown("#### Cedentes")
         st.dataframe(df_cedentes, use_container_width=True, height=400)
+
+        # Sacados
+        df_sacados = df_estoque.groupby(["Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
+        df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_apuama) * 100
+        df_sacados["Enquadrado"] = df_sacados["%PL"].apply(lambda x: "✅" if x <= 10 else "❌")
+        df_sacados = df_sacados.sort_values("%PL", ascending=False)
+
+        # Indicadores Sacados
+        maior_sacado = df_sacados.iloc[0]
+        top5_sacados = df_sacados.head(5)["%PL"].sum()
+
+        st.metric("Maior Sacado", f"{maior_sacado['Sacado']} ({maior_sacado['%PL']:.2f}%)")
+        st.metric("Top 5 Sacados", f"{top5_sacados:.2f}%")
+
+        df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        df_sacados["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
+
+        st.markdown("#### Sacados")
+        st.dataframe(df_sacados, use_container_width=True, height=400)
 
 # ========== RODAPÉ ==========
 st.markdown(
