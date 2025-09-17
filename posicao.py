@@ -105,7 +105,7 @@ with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
         # Logo maior
-        st.image("imagens/Capital-branca.png", width=150)
+        st.image("imagens/Capital-branca.png", width=220, output_format="PNG")
     with cols[1]:
         st.markdown(
             f"""
@@ -195,6 +195,9 @@ def brl(x):
 # formata valores
 matriz_fmt = matriz.applymap(brl)
 
+# remove linhas completamente vazias
+matriz_fmt = matriz_fmt.dropna(how="all")
+
 # coloca a última linha em negrito
 def highlight_last_row(row):
     if row.name == "Disponível para operação":
@@ -206,7 +209,7 @@ styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 st.dataframe(
     styled,
     use_container_width=True,
-    height=280  # altura normal, sem linhas extras
+    height=(40 * len(matriz_fmt) + 60)  # altura ajustada ao nº de linhas
 )
 
 # ========== RODAPÉ ==========
