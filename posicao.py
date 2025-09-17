@@ -81,20 +81,26 @@ def converter_valor_br(valor):
 
 # ========== SENHA ==========
 def autentica_usuario():
-    st.markdown(
-        f"<h3 style='color:{HARVEST_GOLD};text-align:center'>🔒 Acesso restrito</h3>",
-        unsafe_allow_html=True
-    )
-    senha = st.text_input("Digite a senha:", type="password")
-    if senha == "jmjp#agi@fu$obeglgct22":
-        st.success("Senha correta! Bem-vindo ao painel.")
-        return True
-    elif senha:
-        st.error("Senha incorreta.")
-        return False
+    senha = st.session_state.get("senha_ok", False)
+
+    if not senha:
+        st.markdown(
+            f"<h3 style='color:{HARVEST_GOLD};text-align:center'>🔒 Acesso restrito</h3>",
+            unsafe_allow_html=True
+        )
+        senha_input = st.text_input("Digite a senha:", type="password", key="senha_input")
+        if senha_input == "jmjp#agi@fu$obeglgct22":
+            st.session_state["senha_ok"] = True
+            st.success("Senha correta! Bem-vindo ao painel.")
+            return True
+        elif senha_input:
+            st.error("Senha incorreta.")
+            return False
+        else:
+            return False
     else:
-        st.info("Digite a senha para acessar o painel.")
-        return False
+        st.success("Seja bem-vindo ao painel.")
+        return True
 
 if not autentica_usuario():
     st.stop()
@@ -103,8 +109,8 @@ if not autentica_usuario():
 with st.container():
     cols = st.columns([0.095, 0.905])
     with cols[0]:
-        # Troca pela nova logo no repositório
-        st.image("imagens/Capital-branca.png", width=65)
+        # Logo maior
+        st.image("imagens/Capital-branca.png", width=90)
     with cols[1]:
         st.markdown(
             f"""
@@ -190,10 +196,21 @@ def brl(x):
     except:
         return "R$ 0,00"
 
+# Remove possíveis linhas extras com NaN
+matriz = matriz.dropna(how="all")
+
+# Estiliza linha "Disponível para operação" em negrito
+def highlight_last_row(row):
+    if row.name == "Disponível para operação":
+        return ["font-weight: bold" for _ in row]
+    return ["" for _ in row]
+
+styled = matriz.applymap(brl).style.apply(highlight_last_row, axis=1)
+
 st.dataframe(
-    matriz.applymap(brl),
-    use_container_width=True,  # agora ocupa toda a largura
-    height=400,                # altura maior
+    styled,
+    use_container_width=True,  # ocupa toda a largura
+    height=280,                # altura ajustada
 )
 
 # ========== RODAPÉ ==========
