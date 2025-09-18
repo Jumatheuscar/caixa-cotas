@@ -259,7 +259,6 @@ with aba[1]:
         # Cedentes
         df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
         df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
-        df_cedentes["Enquadrado"] = df_cedentes["%PL"].apply(lambda x: "✅" if x <= limites["maior_cedente"] else "❌")
         df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
         # Indicadores Cedentes
@@ -268,13 +267,13 @@ with aba[1]:
 
         st.metric(
             "Maior Cedente",
-            f"{maior_cedente['Cedente']} ({maior_cedente['%PL']:.2f}%)",
-            delta="✅" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌"
+            f"{maior_cedente['Cedente']} - {maior_cedente['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌ Fora do Limite"
         )
         st.metric(
             "Top 5 Cedentes",
             f"{top5_cedentes:.2f}%",
-            delta="✅" if top5_cedentes <= limites["top_cedentes"] else "❌"
+            delta="✅ Enquadrado" if top5_cedentes <= limites["top_cedentes"] else "❌ Fora do Limite"
         )
 
         df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
@@ -286,7 +285,6 @@ with aba[1]:
         # Sacados
         df_sacados = df_estoque.groupby(["Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
         df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
-        df_sacados["Enquadrado"] = df_sacados["%PL"].apply(lambda x: "✅" if x <= limites["maior_sacado"] else "❌")
         df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
         # Indicadores Sacados
@@ -295,13 +293,13 @@ with aba[1]:
 
         st.metric(
             "Maior Sacado",
-            f"{maior_sacado['Sacado']} ({maior_sacado['%PL']:.2f}%)",
-            delta="✅" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌"
+            f"{maior_sacado['Sacado']} - {maior_sacado['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite"
         )
         st.metric(
             f"Top {'10' if fundo_sel == 'Apuama' else '5'} Sacados",
             f"{topN_sacados:.2f}%",
-            delta="✅" if topN_sacados <= limites["top_sacados"] else "❌"
+            delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite"
         )
 
         df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
