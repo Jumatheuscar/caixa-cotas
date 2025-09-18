@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 import requests
-import os
 from io import StringIO
+import os
 
 # =================== CORES ===================
 SPACE_CADET = "#042F3C"
@@ -224,10 +224,13 @@ LIMITES = {
     }
 }
 
-# ========== FUNÇÃO PARA LER/GRAVAR ARQUIVO EM /tmp ==========
-def get_estoque_path(fundo):
-    hoje = datetime.date.today().strftime("%Y%m%d")
-    return f"/tmp/estoque_{fundo}_{hoje}.xlsx"
+# Lista de cedentes que devem ser substituídos pelo sacado
+CEDENTES_SUBSTITUIR = [
+    "UY3 SOCIEDADE DE CREDITO DIRETO S/ A",
+    "MONEY PLUS SOCIEDADE DE CREDITO AO MICROEMPREENDED",
+    "MONEY PLUS SOCIEDADE DE CREDITO AO MICRO",
+    "BMP MONEY PLUS SOCIEDADE DE CRÉDITO DIRETO SA"
+]
 
 # ========== ABA ENQUADRAMENTO ==========
 with aba[1]:
@@ -236,105 +239,91 @@ with aba[1]:
     fundo_sel = st.selectbox("Selecione o fundo", ["Apuama", "Bristol"])
     limites = LIMITES[fundo_sel]
 
-    file_path = get_estoque_path(fundo_sel)
+    uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
+    if uploaded_file is not None:
+        df_estoque = pd.read_excel(uploaded_file)
 
-    # Se já existe no /tmp, carrega direto
-    if os.path.exists(file_path):
-        df_estoque = pd.read_excel(file_path)
-    else:
-        uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
-        if uploaded_file is not None:
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            df_estoque = pd.read_excel(file_path)
-        else:
-            st.info("📂 Envie o arquivo de estoque para continuar.")
-            st.stop()
+        df_estoque = df_estoque.rename(columns={
+            "NOME_CEDENTE": "Cedente",
+            "DOC_CEDENTE": "CNPJ_Cedente",
+            "NOME_SACADO": "Sacado",
+            "DOC_SACADO": "CNPJ_Sacado",
+            "VALOR_NOMINAL": "Valor"
+        })
 
-    # Renomeia colunas
-    df_estoque = df_estoque.rename(columns={
-        "NOME_CEDENTE": "Cedente",
-        "DOC_CEDENTE": "CNPJ_Cedente",
-        "NOME_SACADO": "Sacado",
-        "DOC_SACADO": "CNPJ_Sacado",
-        "VALOR_NOMINAL": "Valor"
-    })
+        # 🔄 Substitui cedente e CNPJ_Cedente pelos dados do sacado quando necessário
+        mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
+        df_estoque.loc[mask, "Cedente"] = df_estoque.loc[mask, "Sacado"]
+        df_estoque.loc[mask, "CNPJ_Cedente"] = df_estoque.loc[mask, "CNPJ_Sacado"]
 
-    # Substitui cedente por sacado nos casos especiais
-    cedentes_para_substituir = [
-        "UY3 SOCIEDADE DE CREDITO DIRETO S/ A",
-        "MONEY PLUS SOCIEDADE DE CREDITO AO MICROEMPREENDED",
-        "MONEY PLUS SOCIEDADE DE CREDITO AO MICRO",
-        "BMP MONEY PLUS SOCIEDADE DE CRÉDITO DIRETO SA"
-    ]
-    df_estoque["Cedente"] = df_estoque.apply(
-        lambda row: row["Sacado"] if row["Cedente"] in cedentes_para_substituir else row["Cedente"],
-        axis=1
-    )
+        # 🔄 Consolida para evitar duplicação
+        df_estoque = df_estoque.groupby(["Cedente", "CNPJ_Cedente", "Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
 
-    # PL
-    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
-    aba_pl = "Dre_Apuama" if fundo_sel == "Apuama" else "Dre_Bristol"
-    url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={aba_pl}"
-    r_pl = requests.get(url_pl)
-    r_pl.raise_for_status()
-    df_pl = pd.read_csv(StringIO(r_pl.text))
-    df_pl["Data"] = pd.to_datetime(df_pl["Data"], dayfirst=True, errors="coerce")
+        # PL
+        GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+        aba_pl = "Dre_Apuama" if fundo_sel == "Apuama" else "Dre_Bristol"
+        url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={aba_pl}"
+        r_pl = requests.get(url_pl)
+        r_pl.raise_for_status()
+        df_pl = pd.read_csv(StringIO(r_pl.text))
+        df_pl["Data"] = pd.to_datetime(df_pl["Data"], dayfirst=True, errors="coerce")
 
-    data_pl = df_pl["Data"].max()
-    pl_fundo = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
+        data_pl = df_pl["Data"].max()
+        pl_fundo = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
 
-    st.markdown(f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_fundo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        st.markdown(f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_fundo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-    # Cedentes
-    df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
-    df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
-    df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
+        # Cedentes
+        df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
+        df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
+        df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
-    maior_cedente = df_cedentes.iloc[0]
-    top5_cedentes = df_cedentes.head(5)["%PL"].sum()
+        # Indicadores Cedentes
+        maior_cedente = df_cedentes.iloc[0]
+        top5_cedentes = df_cedentes.head(5)["%PL"].sum()
 
-    st.metric(
-        "Maior Cedente",
-        f"{maior_cedente['Cedente']} - {maior_cedente['%PL']:.2f}%",
-        delta="✅ Enquadrado" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌ Fora do Limite"
-    )
-    st.metric(
-        "Top 5 Cedentes",
-        f"{top5_cedentes:.2f}%",
-        delta="✅ Enquadrado" if top5_cedentes <= limites["top_cedentes"] else "❌ Fora do Limite"
-    )
+        st.metric(
+            "Maior Cedente",
+            f"{maior_cedente['Cedente']} - {maior_cedente['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            "Top 5 Cedentes",
+            f"{top5_cedentes:.2f}%",
+            delta="✅ Enquadrado" if top5_cedentes <= limites["top_cedentes"] else "❌ Fora do Limite"
+        )
 
-    df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    df_cedentes["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
+        df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        df_cedentes["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
 
-    st.markdown("#### Cedentes")
-    st.dataframe(df_cedentes, use_container_width=True, height=400)
+        st.markdown("#### Cedentes")
+        st.dataframe(df_cedentes, use_container_width=True, height=400)
 
-    # Sacados
-    df_sacados = df_estoque.groupby(["Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
-    df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
-    df_sacados = df_sacados.sort_values("%PL", ascending=False)
+        # Sacados
+        df_sacados = df_estoque.groupby(["Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
+        df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
+        df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
-    maior_sacado = df_sacados.iloc[0]
-    topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
+        # Indicadores Sacados
+        maior_sacado = df_sacados.iloc[0]
+        topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
 
-    st.metric(
-        "Maior Sacado",
-        f"{maior_sacado['Sacado']} - {maior_sacado['%PL']:.2f}%",
-        delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite"
-    )
-    st.metric(
-        f"Top {'10' if fundo_sel == 'Apuama' else '5'} Sacados",
-        f"{topN_sacados:.2f}%",
-        delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite"
-    )
+        st.metric(
+            "Maior Sacado",
+            f"{maior_sacado['Sacado']} - {maior_sacado['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            f"Top {'10' if fundo_sel == 'Apuama' else '5'} Sacados",
+            f"{topN_sacados:.2f}%",
+            delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite"
+        )
 
-    df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    df_sacados["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
+        df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        df_sacados["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
 
-    st.markdown("#### Sacados")
-    st.dataframe(df_sacados, use_container_width=True, height=400)
+        st.markdown("#### Sacados")
+        st.dataframe(df_sacados, use_container_width=True, height=400)
 
 # ========== RODAPÉ ==========
 st.markdown(
