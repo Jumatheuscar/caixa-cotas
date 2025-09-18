@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import requests
+import os
 from io import StringIO
 
 # =================== CORES ===================
@@ -209,18 +210,8 @@ with aba[0]:
 
 # ========== LIMITES DE ENQUADRAMENTO ==========
 LIMITES = {
-    "Apuama": {
-        "maior_cedente": 10,
-        "top_cedentes": 40,
-        "maior_sacado": 10,
-        "top_sacados": 35
-    },
-    "Bristol": {
-        "maior_cedente": 7,
-        "top_cedentes": 40,
-        "maior_sacado": 10,
-        "top_sacados": 25
-    }
+    "Apuama": {"maior_cedente": 10, "top_cedentes": 40, "maior_sacado": 10, "top_sacados": 35},
+    "Bristol": {"maior_cedente": 7, "top_cedentes": 40, "maior_sacado": 10, "top_sacados": 25}
 }
 
 # ========== ABA ENQUADRAMENTO ==========
@@ -230,10 +221,23 @@ with aba[1]:
     fundo_sel = st.selectbox("Selecione o fundo", ["Apuama", "Bristol"])
     limites = LIMITES[fundo_sel]
 
-    uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
-    if uploaded_file is not None:
-        df_estoque = pd.read_excel(uploaded_file)
+    # === Caminho do arquivo salvo em /tmp ===
+    hoje_str = datetime.datetime.today().strftime("%Y-%m-%d")
+    tmp_path = f"/tmp/{fundo_sel}_{hoje_str}.xlsx"
 
+    # Se já existir em /tmp, carrega ele
+    if os.path.exists(tmp_path):
+        df_estoque = pd.read_excel(tmp_path)
+    else:
+        uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
+        if uploaded_file is not None:
+            with open(tmp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            df_estoque = pd.read_excel(tmp_path)
+        else:
+            df_estoque = None
+
+    if df_estoque is not None:
         df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
@@ -261,7 +265,6 @@ with aba[1]:
         df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
         df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
-        # Indicadores Cedentes
         maior_cedente = df_cedentes.iloc[0]
         top5_cedentes = df_cedentes.head(5)["%PL"].sum()
 
@@ -287,7 +290,6 @@ with aba[1]:
         df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
         df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
-        # Indicadores Sacados
         maior_sacado = df_sacados.iloc[0]
         topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
 
