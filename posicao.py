@@ -3,7 +3,6 @@ import pandas as pd
 import datetime
 import requests
 from io import StringIO
-import os
 
 # =================== CORES ===================
 SPACE_CADET = "#042F3C"
@@ -208,38 +207,33 @@ with aba[0]:
         height=(40 * len(matriz_fmt) + 60)
     )
 
+# ========== LIMITES DE ENQUADRAMENTO ==========
+LIMITES = {
+    "Apuama": {
+        "maior_cedente": 10,
+        "top_cedentes": 40,
+        "maior_sacado": 10,
+        "top_sacados": 35
+    },
+    "Bristol": {
+        "maior_cedente": 7,
+        "top_cedentes": 40,
+        "maior_sacado": 10,
+        "top_sacados": 25
+    }
+}
+
 # ========== ABA ENQUADRAMENTO ==========
 with aba[1]:
     st.markdown("### 📊 Enquadramento - Cedentes e Sacados")
 
-    fundo_sel = st.radio("Selecione o Fundo", ["Apuama", "Bristol"], horizontal=True)
+    fundo_sel = st.selectbox("Selecione o fundo", ["Apuama", "Bristol"])
+    limites = LIMITES[fundo_sel]
 
-    GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
-    sheet_map = {
-        "Apuama": "Dre_Apuama",
-        "Bristol": "Dre_Bristol"
-    }
+    uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
+    if uploaded_file is not None:
+        df_estoque = pd.read_excel(uploaded_file)
 
-    # === Persistência do arquivo ===
-    hoje = datetime.date.today().strftime("%Y%m%d")
-    file_path = f"/tmp/estoque_{fundo_sel}_{hoje}.xlsx"
-
-    if os.path.exists(file_path):
-        df_estoque = pd.read_excel(file_path)
-        st.info(f"Usando arquivo de estoque já carregado hoje para {fundo_sel}.")
-    else:
-        uploaded_file = st.file_uploader(f"Envie o arquivo de estoque do {fundo_sel}", type=["xlsx"], key=f"upload_{fundo_sel}")
-        if uploaded_file:
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            df_estoque = pd.read_excel(file_path)
-            st.success(f"Arquivo de estoque salvo e carregado para {fundo_sel}.")
-        else:
-            st.warning(f"Nenhum arquivo carregado ainda para {fundo_sel}.")
-            df_estoque = None
-
-    if df_estoque is not None:
-        # Renomear colunas
         df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
@@ -248,29 +242,40 @@ with aba[1]:
             "VALOR_NOMINAL": "Valor"
         })
 
-        # Buscar PL do fundo
-        url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_map[fundo_sel]}"
+        # PL
+        GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+        aba_pl = "Dre_Apuama" if fundo_sel == "Apuama" else "Dre_Bristol"
+        url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={aba_pl}"
         r_pl = requests.get(url_pl)
         r_pl.raise_for_status()
         df_pl = pd.read_csv(StringIO(r_pl.text))
         df_pl["Data"] = pd.to_datetime(df_pl["Data"], dayfirst=True, errors="coerce")
 
         data_pl = df_pl["Data"].max()
-        pl_valor = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
+        pl_fundo = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
 
-        st.markdown(f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        st.markdown(f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_fundo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
         # Cedentes
         df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
-        df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_valor) * 100
-        df_cedentes["Enquadrado"] = df_cedentes["%PL"].apply(lambda x: "✅" if x <= 10 else "❌")
+        df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
+        df_cedentes["Enquadrado"] = df_cedentes["%PL"].apply(lambda x: "✅" if x <= limites["maior_cedente"] else "❌")
         df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
+        # Indicadores Cedentes
         maior_cedente = df_cedentes.iloc[0]
         top5_cedentes = df_cedentes.head(5)["%PL"].sum()
 
-        st.metric("Maior Cedente", f"{maior_cedente['Cedente']} ({maior_cedente['%PL']:.2f}%)")
-        st.metric("Top 5 Cedentes", f"{top5_cedentes:.2f}%")
+        st.metric(
+            "Maior Cedente",
+            f"{maior_cedente['Cedente']} ({maior_cedente['%PL']:.2f}%)",
+            delta="✅" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌"
+        )
+        st.metric(
+            "Top 5 Cedentes",
+            f"{top5_cedentes:.2f}%",
+            delta="✅" if top5_cedentes <= limites["top_cedentes"] else "❌"
+        )
 
         df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         df_cedentes["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
@@ -280,15 +285,24 @@ with aba[1]:
 
         # Sacados
         df_sacados = df_estoque.groupby(["Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
-        df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_valor) * 100
-        df_sacados["Enquadrado"] = df_sacados["%PL"].apply(lambda x: "✅" if x <= 10 else "❌")
+        df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
+        df_sacados["Enquadrado"] = df_sacados["%PL"].apply(lambda x: "✅" if x <= limites["maior_sacado"] else "❌")
         df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
+        # Indicadores Sacados
         maior_sacado = df_sacados.iloc[0]
-        top5_sacados = df_sacados.head(5)["%PL"].sum()
+        topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
 
-        st.metric("Maior Sacado", f"{maior_sacado['Sacado']} ({maior_sacado['%PL']:.2f}%)")
-        st.metric("Top 5 Sacados", f"{top5_sacados:.2f}%")
+        st.metric(
+            "Maior Sacado",
+            f"{maior_sacado['Sacado']} ({maior_sacado['%PL']:.2f}%)",
+            delta="✅" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌"
+        )
+        st.metric(
+            f"Top {'10' if fundo_sel == 'Apuama' else '5'} Sacados",
+            f"{topN_sacados:.2f}%",
+            delta="✅" if topN_sacados <= limites["top_sacados"] else "❌"
+        )
 
         df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         df_sacados["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
