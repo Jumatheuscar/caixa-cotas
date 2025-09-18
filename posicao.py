@@ -224,7 +224,7 @@ LIMITES = {
     }
 }
 
-# Lista de cedentes que devem ser substituídos pelo sacado
+# Cedentes que devem virar sacados
 CEDENTES_SUBSTITUIR = [
     "UY3 SOCIEDADE DE CREDITO DIRETO S/ A",
     "MONEY PLUS SOCIEDADE DE CREDITO AO MICROEMPREENDED",
@@ -239,10 +239,23 @@ with aba[1]:
     fundo_sel = st.selectbox("Selecione o fundo", ["Apuama", "Bristol"])
     limites = LIMITES[fundo_sel]
 
+    # caminho salvo em /tmp
+    tmp_path = f"/tmp/{fundo_sel}.xlsx"
+
     uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
     if uploaded_file is not None:
+        # salva o arquivo em /tmp
+        with open(tmp_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
         df_estoque = pd.read_excel(uploaded_file)
+    elif os.path.exists(tmp_path):
+        df_estoque = pd.read_excel(tmp_path)
+        st.info(f"Usando arquivo salvo anteriormente para {fundo_sel}.")
+    else:
+        st.warning("Nenhum arquivo enviado ainda.")
+        df_estoque = None
 
+    if df_estoque is not None:
         df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
@@ -251,12 +264,12 @@ with aba[1]:
             "VALOR_NOMINAL": "Valor"
         })
 
-        # 🔄 Substitui cedente e CNPJ_Cedente pelos dados do sacado quando necessário
+        # substitui cedente -> sacado
         mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
         df_estoque.loc[mask, "Cedente"] = df_estoque.loc[mask, "Sacado"]
         df_estoque.loc[mask, "CNPJ_Cedente"] = df_estoque.loc[mask, "CNPJ_Sacado"]
 
-        # 🔄 Consolida para evitar duplicação
+        # consolida
         df_estoque = df_estoque.groupby(["Cedente", "CNPJ_Cedente", "Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
 
         # PL
@@ -278,7 +291,6 @@ with aba[1]:
         df_cedentes["%PL"] = df_cedentes["Valor"].astype(float) / float(pl_fundo) * 100
         df_cedentes = df_cedentes.sort_values("%PL", ascending=False)
 
-        # Indicadores Cedentes
         maior_cedente = df_cedentes.iloc[0]
         top5_cedentes = df_cedentes.head(5)["%PL"].sum()
 
@@ -304,7 +316,6 @@ with aba[1]:
         df_sacados["%PL"] = df_sacados["Valor"].astype(float) / float(pl_fundo) * 100
         df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
-        # Indicadores Sacados
         maior_sacado = df_sacados.iloc[0]
         topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
 
