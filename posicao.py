@@ -239,41 +239,53 @@ with aba[1]:
     fundo_sel = st.selectbox("Selecione o fundo", ["Apuama", "Bristol"])
     limites = LIMITES[fundo_sel]
 
+    # caminho salvo em /tmp
     tmp_path = f"/tmp/{fundo_sel}.xlsx"
 
-    # estado do uploader
-    if f"df_{fundo_sel}" not in st.session_state:
-        st.session_state[f"df_{fundo_sel}"] = None
+    # Controle da exibição
+    if "file_uploaded" not in st.session_state:
+        st.session_state["file_uploaded"] = False
 
-    if st.session_state[f"df_{fundo_sel}"] is None:
+    if not st.session_state["file_uploaded"]:
         uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
         if uploaded_file is not None:
             with open(tmp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            st.session_state[f"df_{fundo_sel}"] = pd.read_excel(uploaded_file)
+            df_estoque = pd.read_excel(uploaded_file)
+            st.session_state["file_uploaded"] = True
+        elif os.path.exists(tmp_path):
+            df_estoque = pd.read_excel(tmp_path)
+            st.session_state["file_uploaded"] = True
+        else:
+            df_estoque = None
     else:
-        if st.button("📂 Carregar novo arquivo"):
-            st.session_state[f"df_{fundo_sel}"] = None
-            st.rerun()
-        df_estoque = st.session_state[f"df_{fundo_sel}"]
+        if os.path.exists(tmp_path):
+            df_estoque = pd.read_excel(tmp_path)
+            if st.button("📂 Carregar novo arquivo"):
+                st.session_state["file_uploaded"] = False
+                st.rerun()
+        else:
+            df_estoque = None
+            st.session_state["file_uploaded"] = False
 
-    if st.session_state[f"df_{fundo_sel}"] is not None:
-        df_estoque = st.session_state[f"df_{fundo_sel}"]
-
-        df_estoque = df_estoque.rename(columns={
+    if df_estoque is not None:
+        df_estoque = df_estoque.rename(columns={{
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
             "NOME_SACADO": "Sacado",
             "DOC_SACADO": "CNPJ_Sacado",
             "VALOR_NOMINAL": "Valor"
-        })
+        }})
 
+        # substitui cedente -> sacado
         mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
         df_estoque.loc[mask, "Cedente"] = df_estoque.loc[mask, "Sacado"]
         df_estoque.loc[mask, "CNPJ_Cedente"] = df_estoque.loc[mask, "CNPJ_Sacado"]
 
+        # consolida
         df_estoque = df_estoque.groupby(["Cedente", "CNPJ_Cedente", "Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
 
+        # PL
         GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
         aba_pl = "Dre_Apuama" if fundo_sel == "Apuama" else "Dre_Bristol"
         url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={aba_pl}"
@@ -405,8 +417,8 @@ with aba[1]:
 
 # ========== RODAPÉ ==========
 st.markdown(
-    f"""<p style="text-align: right; color: {HARVEST_GOLD}; font-size: 1em;">
-        <b>LIBRA CAPITAL</b>
+    f"""<p style="text-align: right; color: {HONEYDEW}; font-size: 1em;">
+        <b style="color:{HARVEST_GOLD}">LIBRA CAPITAL</b> 🦁
     </p>""",
     unsafe_allow_html=True,
 )
