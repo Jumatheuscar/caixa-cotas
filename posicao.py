@@ -256,13 +256,13 @@ with aba[1]:
         df_estoque = None
 
     if df_estoque is not None:
-        df_estoque = df_estoque.rename(columns={{
+        df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
             "NOME_SACADO": "Sacado",
             "DOC_SACADO": "CNPJ_Sacado",
             "VALOR_NOMINAL": "Valor"
-        }})
+        })
 
         # substitui cedente -> sacado
         mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
