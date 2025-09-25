@@ -406,7 +406,7 @@ with aba[1]:
 # ========== RODAPÉ ==========
 st.markdown(
     f"""<p style="text-align: right; color: {HARVEST_GOLD}; font-size: 1em;">
-        <b>LIBRA CAPITAL</b> 🦁
+        <b>LIBRA CAPITAL</b>
     </p>""",
     unsafe_allow_html=True,
 )
