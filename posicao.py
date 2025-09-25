@@ -242,7 +242,7 @@ with aba[1]:
     # caminho salvo em /tmp
     tmp_path = f"/tmp/{fundo_sel}.xlsx"
 
-    # Controle da exibição
+    # Opção 1: esconder uploader após ter arquivo carregado/salvo
     if "file_uploaded" not in st.session_state:
         st.session_state["file_uploaded"] = False
 
@@ -269,13 +269,13 @@ with aba[1]:
             st.session_state["file_uploaded"] = False
 
     if df_estoque is not None:
-        df_estoque = df_estoque.rename(columns={{
+        df_estoque = df_estoque.rename(columns={
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
             "NOME_SACADO": "Sacado",
             "DOC_SACADO": "CNPJ_Sacado",
             "VALOR_NOMINAL": "Valor"
-        }})
+        })
 
         # substitui cedente -> sacado
         mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
@@ -418,7 +418,7 @@ with aba[1]:
 # ========== RODAPÉ ==========
 st.markdown(
     f"""<p style="text-align: right; color: {HONEYDEW}; font-size: 1em;">
-        <b style="color:{HARVEST_GOLD}">LIBRA CAPITAL</b> 🦁
+        <b style="color:{HARVEST_GOLD}">LIBRA CAPITAL</b> 
     </p>""",
     unsafe_allow_html=True,
 )
