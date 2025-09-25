@@ -256,13 +256,13 @@ with aba[1]:
         df_estoque = None
 
     if df_estoque is not None:
-        df_estoque = df_estoque.rename(columns={
+        df_estoque = df_estoque.rename(columns={{
             "NOME_CEDENTE": "Cedente",
             "DOC_CEDENTE": "CNPJ_Cedente",
             "NOME_SACADO": "Sacado",
             "DOC_SACADO": "CNPJ_Sacado",
             "VALOR_NOMINAL": "Valor"
-        })
+        }})
 
         # substitui cedente -> sacado
         mask = df_estoque["Cedente"].isin(CEDENTES_SUBSTITUIR)
@@ -317,7 +317,8 @@ with aba[1]:
         df_sacados = df_sacados.sort_values("%PL", ascending=False)
 
         maior_sacado = df_sacados.iloc[0]
-        topN_sacados = df_sacados.head(10 if fundo_sel == "Apuama" else 5)["%PL"].sum()
+        topN = 10 if fundo_sel == "Apuama" else 5
+        topN_sacados = df_sacados.head(topN)["%PL"].sum()
 
         st.metric(
             "Maior Sacado",
@@ -325,7 +326,7 @@ with aba[1]:
             delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite"
         )
         st.metric(
-            f"Top {'10' if fundo_sel == 'Apuama' else '5'} Sacados",
+            f"Top {topN} Sacados",
             f"{topN_sacados:.2f}%",
             delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite"
         )
@@ -335,6 +336,71 @@ with aba[1]:
 
         st.markdown("#### Sacados")
         st.dataframe(df_sacados, use_container_width=True, height=400)
+
+        # ========== SIMULADOR DE OPERAÇÃO ==========
+        st.markdown("### 🧮 Simulador de Operação")
+
+        aba_sim = st.tabs(["Cedente", "Sacado"])
+
+        # --- Simulador Cedente ---
+        with aba_sim[0]:
+            cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
+            valor_simulado_ced = st.number_input("Digite o valor da operação simulada (R$)", min_value=0.0, step=1000.0, key="cedente_sim")
+
+            if valor_simulado_ced > 0:
+                linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
+                valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
+                novo_total = valor_atual + valor_simulado_ced
+                perc_total = novo_total / pl_fundo * 100
+
+                df_cedentes_sim = df_cedentes.copy()
+                df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = f"{perc_total:.2f}%"
+                top5_cedentes_sim = df_cedentes_sim.head(5)["%PL"].str.replace("%", "").str.replace(",", ".").astype(float).sum()
+
+                st.markdown(f"**Valor atual:** R$ {valor_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+                st.markdown(f"**Valor simulado:** R$ {valor_simulado_ced:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+                st.markdown(f"**Novo total:** R$ {novo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+                st.metric(
+                    "Novo %PL do Cedente",
+                    f"{perc_total:.2f}%",
+                    delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    "Novo Top 5 Cedentes",
+                    f"{top5_cedentes_sim:.2f}%",
+                    delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
+                )
+
+        # --- Simulador Sacado ---
+        with aba_sim[1]:
+            sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
+            valor_simulado_sac = st.number_input("Digite o valor da operação simulada (R$)", min_value=0.0, step=1000.0, key="sacado_sim")
+
+            if valor_simulado_sac > 0:
+                linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
+                valor_atual_sac = converter_valor_br(linha_sac["Valor"].values[0])
+                novo_total_sac = valor_atual_sac + valor_simulado_sac
+                perc_total_sac = novo_total_sac / pl_fundo * 100
+
+                df_sacados_sim = df_sacados.copy()
+                df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = f"{perc_total_sac:.2f}%"
+                topN_sacados_sim = df_sacados_sim.head(topN)["%PL"].str.replace("%", "").str.replace(",", ".").astype(float).sum()
+
+                st.markdown(f"**Valor atual:** R$ {valor_atual_sac:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+                st.markdown(f"**Valor simulado:** R$ {valor_simulado_sac:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+                st.markdown(f"**Novo total:** R$ {novo_total_sac:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+                st.metric(
+                    "Novo %PL do Sacado",
+                    f"{perc_total_sac:.2f}%",
+                    delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    f"Novo Top {topN} Sacados",
+                    f"{topN_sacados_sim:.2f}%",
+                    delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
+                )
 
 # ========== RODAPÉ ==========
 st.markdown(
