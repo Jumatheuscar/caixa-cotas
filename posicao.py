@@ -6,7 +6,6 @@ from io import StringIO
 import os
 import gspread
 from google.oauth2.service_account import Credentials
-import locale
 
 # =================== CORES ===================
 SPACE_CADET = "#042F3C"
@@ -60,7 +59,7 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ========== FUNÇÕES ==========
+# ========== FUNÇÃO PARA CONVERTER VALORES BR ==========
 def converter_valor_br(valor):
     if pd.isna(valor) or valor == "" or valor is None:
         return 0.0
@@ -81,26 +80,6 @@ def converter_valor_br(valor):
         return float(valor_str)
     except:
         return 0.0
-
-locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
-
-def format_brl(value):
-    try:
-        return locale.format_string("%.2f", value, grouping=True)
-    except:
-        return "0,00"
-
-def parse_brl(value_str):
-    try:
-        return float(value_str.replace(".", "").replace(",", "."))
-    except:
-        return 0.0
-
-def brl(x):
-    try:
-        return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "R$ 0,00"
 
 # ========== SENHA ==========
 def autentica_usuario():
@@ -157,9 +136,10 @@ with aba[0]:
 
     GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
 
-    # Dados Caixa
+    # Aba principal do caixa
     url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
     r_caixa = requests.get(url_caixa)
+    r_caixa.raise_for_status()
     df_caixa = pd.read_csv(StringIO(r_caixa.text))
     df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 
@@ -178,20 +158,29 @@ with aba[0]:
     data_caixa_br = data_caixa_sel.strftime("%d/%m/%Y")
     df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 
-    # Inputs "Usado"
+    # Aba de inputs para valores de "Usado"
     url_inputs = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=inputs_caixa"
     r_inputs = requests.get(url_inputs)
+    r_inputs.raise_for_status()
     df_inputs = pd.read_csv(StringIO(r_inputs.text))
     df_inputs["Data"] = pd.to_datetime(df_inputs["Data"], dayfirst=True, errors="coerce")
 
     usados_dict = {}
-    for _, row in df_inputs[df_inputs["Data"] == pd.to_datetime(data_caixa_sel)].iterrows():
+    df_inputs_dia = df_inputs[df_inputs["Data"] == pd.to_datetime(data_caixa_sel)]
+    for _, row in df_inputs_dia.iterrows():
         usados_dict[row["Empresa"]] = converter_valor_br(row["Usado"])
 
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-    empresas = ["Apuama", "Bristol", "Consignado"]
-    contas = ["Conta recebimento", "Conta de conciliação", "Reserva de caixa", "Conta pgto", "Usado", "Disponível para operação"]
+    empresas = ["Apuama", "Bristol" ,"Consignado"]
+    contas = [
+        "Conta recebimento",
+        "Conta de conciliação",
+        "Reserva de caixa",
+        "Conta pgto",
+        "Usado",
+        "Disponível para operação"
+    ]
     matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
     for _, linha in df_caixa_dia.iterrows():
@@ -203,6 +192,7 @@ with aba[0]:
             conta_pgto = converter_valor_br(linha["Conta pgto"])
             usado = usados_dict.get(empresa, 0.0)
             disponivel = conta_pgto - reserva - usado
+
             matriz.at["Conta recebimento", empresa] = conta_receb
             matriz.at["Conta de conciliação", empresa] = conta_conc
             matriz.at["Reserva de caixa", empresa] = reserva
@@ -210,24 +200,20 @@ with aba[0]:
             matriz.at["Usado", empresa] = usado
             matriz.at["Disponível para operação", empresa] = disponivel
 
-    # Inputs
+    # Inputs no Streamlit
     st.markdown("### Ajustar valores de 'Usado'")
     novos_usados = {}
     for emp in empresas:
         valor_atual = usados_dict.get(emp, 0.0)
-        input_str = st.text_input(f"{emp} - Usado", value=format_brl(valor_atual), key=f"usado_{emp}")
-        novos_usados[emp] = parse_brl(input_str)
-
-    # Atualização imediata
-    for emp, val in novos_usados.items():
-        matriz.at["Usado", emp] = val
-        matriz.at["Disponível para operação", emp] = (matriz.at["Conta pgto", emp] or 0) - (matriz.at["Reserva de caixa", emp] or 0) - val
+        novos_usados[emp] = st.number_input(f"{emp} - Usado", min_value=0.0, value=float(valor_atual), step=1000.0)
 
     if st.button("💾 Salvar Usados"):
+        import json
         service_account_info = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("inputs_caixa")
+
         for emp, val in novos_usados.items():
             mask = (df_inputs["Data"] == pd.to_datetime(data_caixa_sel)) & (df_inputs["Empresa"] == emp)
             if mask.any():
@@ -235,10 +221,23 @@ with aba[0]:
                 sheet.update_cell(cell.row, 3, val)
             else:
                 sheet.append_row([data_caixa_sel.strftime("%d/%m/%Y"), emp, val])
+
         st.success("Valores de 'Usado' salvos com sucesso!")
 
-    styled = matriz.applymap(brl).style.apply(lambda r: ["font-weight:bold" if r.name == "Disponível para operação" else "" for _ in r], axis=1)
-    st.dataframe(styled, use_container_width=True, height=(40 * len(matriz) + 60))
+    def brl(x):
+        try:
+            return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except:
+            return "R$ 0,00"
+
+    matriz_fmt = matriz.applymap(brl).dropna(how="all")
+    def highlight_last_row(row):
+        if row.name == "Disponível para operação":
+            return ["font-weight: bold" for _ in row]
+        return ["" for _ in row]
+    styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
+
+    st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
 
 # ========== ABA ENQUADRAMENTO ==========
 LIMITES = {
