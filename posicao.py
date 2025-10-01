@@ -6,7 +6,6 @@ from io import StringIO
 import os
 import gspread
 from google.oauth2.service_account import Credentials
-import locale
 
 # =================== CORES ===================
 SPACE_CADET = "#042F3C"
@@ -173,7 +172,7 @@ with aba[0]:
 
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-    empresas = ["Apuama", "Bristol", "Consignado"]
+    empresas = ["Apuama", "Bristol" ,"Consignado"]
     contas = [
         "Conta recebimento",
         "Conta de conciliação",
@@ -201,51 +200,17 @@ with aba[0]:
             matriz.at["Usado", empresa] = usado
             matriz.at["Disponível para operação", empresa] = disponivel
 
-    # ================== INPUTS DE USADO ==================
-    locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
-
-    def format_brl(value):
-        try:
-            return locale.format_string("%.2f", value, grouping=True)
-        except:
-            return "0,00"
-
-    def parse_brl(value_str):
-        try:
-            return float(value_str.replace(".", "").replace(",", "."))
-        except:
-            return 0.0
-
+    # Inputs no Streamlit
     st.markdown("### Ajustar valores de 'Usado'")
     novos_usados = {}
-
     for emp in empresas:
         valor_atual = usados_dict.get(emp, 0.0)
-        valor_formatado = format_brl(valor_atual)
-        input_str = st.text_input(
-            f"{emp} - Usado",
-            value=valor_formatado,
-            key=f"usado_{emp}"
-        )
-        novos_usados[emp] = parse_brl(input_str)
+        novos_usados[emp] = st.number_input(f"{emp} - Usado", min_value=0.0, value=float(valor_atual), step=1000.0)
 
-    # Atualiza a matriz imediatamente
-    for emp, val in novos_usados.items():
-        matriz.at["Usado", emp] = val
-        matriz.at["Disponível para operação", emp] = (
-            (matriz.at["Conta pgto", emp] or 0)
-            - (matriz.at["Reserva de caixa", emp] or 0)
-            - val
-        )
-
-    # Botão para salvar no Google Sheets
     if st.button("💾 Salvar Usados"):
         import json
         service_account_info = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
-        )
+        creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("inputs_caixa")
 
@@ -259,7 +224,6 @@ with aba[0]:
 
         st.success("Valores de 'Usado' salvos com sucesso!")
 
-    # ===== Formatar tabela =====
     def brl(x):
         try:
             return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -267,16 +231,13 @@ with aba[0]:
             return "R$ 0,00"
 
     matriz_fmt = matriz.applymap(brl).dropna(how="all")
-
     def highlight_last_row(row):
         if row.name == "Disponível para operação":
             return ["font-weight: bold" for _ in row]
         return ["" for _ in row]
-
     styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
     st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
-
 
 # ========== ABA ENQUADRAMENTO ==========
 LIMITES = {
