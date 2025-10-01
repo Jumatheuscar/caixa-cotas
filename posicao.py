@@ -208,7 +208,9 @@ with aba[0]:
         novos_usados[emp] = st.number_input(f"{emp} - Usado", min_value=0.0, value=float(valor_atual), step=1000.0)
 
     if st.button("💾 Salvar Usados"):
-        creds = Credentials.from_service_account_file("service_account.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        import json
+        service_account_info = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("inputs_caixa")
 
