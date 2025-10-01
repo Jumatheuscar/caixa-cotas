@@ -59,16 +59,18 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ========== FUNÇÃO PARA CONVERTER VALORES BR ==========
+# ========== FUNÇÕES DE FORMATAÇÃO ==========
 def converter_valor_br(valor):
     if pd.isna(valor) or valor == "" or valor is None:
         return 0.0
     valor_str = str(valor).replace("R$", "").replace(" ", "").strip()
+    # Se vier como 1234.56 (formato EN), aceita direto
     if valor_str.count('.') == 1 and valor_str.count(',') == 0:
         try:
             return float(valor_str)
         except:
             return 0.0
+    # Converte 1.234,56 -> 1234.56
     if ',' in valor_str:
         partes = valor_str.split(',')
         parte_inteira = partes[0].replace('.', '')
@@ -80,6 +82,21 @@ def converter_valor_br(valor):
         return float(valor_str)
     except:
         return 0.0
+
+def brl(x):
+    try:
+        return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "R$ 0,00"
+
+def input_brl(label, value=0.0, key=None):
+    """
+    Campo de entrada em texto usando padrão BR (milhar . e decimal ,).
+    Retorna float em padrão Python.
+    """
+    default_txt = f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    txt = st.text_input(label, value=default_txt, key=key)
+    return converter_valor_br(txt)
 
 # ========== SENHA ==========
 def autentica_usuario():
@@ -136,7 +153,7 @@ with aba[0]:
 
     GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
 
-    # Aba principal do caixa
+    # 1) Aba principal do caixa
     url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
     r_caixa = requests.get(url_caixa)
     r_caixa.raise_for_status()
@@ -158,7 +175,7 @@ with aba[0]:
     data_caixa_br = data_caixa_sel.strftime("%d/%m/%Y")
     df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
 
-    # Aba de inputs para valores de "Usado"
+    # 2) Aba de inputs para valores de "Usado"
     url_inputs = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=inputs_caixa"
     r_inputs = requests.get(url_inputs)
     r_inputs.raise_for_status()
@@ -172,7 +189,7 @@ with aba[0]:
 
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-    empresas = ["Apuama", "Bristol" ,"Consignado"]
+    empresas = ["Apuama", "Bristol", "Consignado"]
     contas = [
         "Conta recebimento",
         "Conta de conciliação",
@@ -200,43 +217,56 @@ with aba[0]:
             matriz.at["Usado", empresa] = usado
             matriz.at["Disponível para operação", empresa] = disponivel
 
-    # Inputs no Streamlit
+    # ===== Inputs (BR) + pré-visualização instantânea =====
     st.markdown("### Ajustar valores de 'Usado'")
     novos_usados = {}
     for emp in empresas:
         valor_atual = usados_dict.get(emp, 0.0)
-        novos_usados[emp] = st.number_input(f"{emp} - Usado", min_value=0.0, value=float(valor_atual), step=1000.0)
+        novos_usados[emp] = input_brl(f"{emp} - Usado (R$)", value=valor_atual, key=f"usado_{emp}")
 
+    # Pré-visualização: atualiza a matriz na hora que digita (antes de salvar)
+    matriz_preview = matriz.copy()
+    for emp, val in novos_usados.items():
+        if emp in matriz_preview.columns:
+            conta_pgto = matriz_preview.at["Conta pgto", emp] or 0.0
+            reserva = matriz_preview.at["Reserva de caixa", emp] or 0.0
+            matriz_preview.at["Usado", emp] = val
+            matriz_preview.at["Disponível para operação", emp] = conta_pgto - reserva - val
+
+    # Botão de salvar -> grava no Google Sheets + rerun instantâneo
     if st.button("💾 Salvar Usados"):
-        import json
         service_account_info = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        creds = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("inputs_caixa")
 
         for emp, val in novos_usados.items():
             mask = (df_inputs["Data"] == pd.to_datetime(data_caixa_sel)) & (df_inputs["Empresa"] == emp)
             if mask.any():
-                cell = sheet.find(emp)
-                sheet.update_cell(cell.row, 3, val)
+                # Atualiza a linha certa por EMPRESA + DATA
+                # Procurar a célula do EMPRESA na coluna correta:
+                # Aqui, por simplicidade, usamos find(emp) e assumimos estrutura estável (Data | Empresa | Usado)
+                cell_emp = sheet.find(emp)
+                # Coluna 3 = "Usado"
+                sheet.update_cell(cell_emp.row, 3, float(val))
             else:
-                sheet.append_row([data_caixa_sel.strftime("%d/%m/%Y"), emp, val])
+                sheet.append_row([data_caixa_sel.strftime("%d/%m/%Y"), emp, float(val)])
 
         st.success("Valores de 'Usado' salvos com sucesso!")
+        st.rerun()
 
-    def brl(x):
-        try:
-            return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        except:
-            return "R$ 0,00"
+    # Render da tabela (com pré-visualização)
+    matriz_fmt = matriz_preview.applymap(brl).dropna(how="all")
 
-    matriz_fmt = matriz.applymap(brl).dropna(how="all")
     def highlight_last_row(row):
         if row.name == "Disponível para operação":
             return ["font-weight: bold" for _ in row]
         return ["" for _ in row]
-    styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
+    styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
     st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
 
 # ========== ABA ENQUADRAMENTO ==========
@@ -264,7 +294,11 @@ with aba[1]:
         st.session_state["file_uploaded"] = False
 
     if not st.session_state["file_uploaded"]:
-        uploaded_file = st.file_uploader(f"Envie o arquivo de estoque ({fundo_sel})", type=["xlsx"], key=f"upload_{fundo_sel}")
+        uploaded_file = st.file_uploader(
+            f"Envie o arquivo de estoque ({fundo_sel})",
+            type=["xlsx"],
+            key=f"upload_{fundo_sel}"
+        )
         if uploaded_file is not None:
             with open(tmp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -298,8 +332,12 @@ with aba[1]:
         df_estoque.loc[mask, "Cedente"] = df_estoque.loc[mask, "Sacado"]
         df_estoque.loc[mask, "CNPJ_Cedente"] = df_estoque.loc[mask, "CNPJ_Sacado"]
 
-        df_estoque = df_estoque.groupby(["Cedente", "CNPJ_Cedente", "Sacado", "CNPJ_Sacado"], as_index=False)["Valor"].sum()
+        df_estoque = df_estoque.groupby(
+            ["Cedente", "CNPJ_Cedente", "Sacado", "CNPJ_Sacado"],
+            as_index=False
+        )["Valor"].sum()
 
+        GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
         aba_pl = "Dre_Apuama" if fundo_sel == "Apuama" else "Dre_Bristol"
         url_pl = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={aba_pl}"
         r_pl = requests.get(url_pl)
@@ -310,7 +348,10 @@ with aba[1]:
         data_pl = df_pl["Data"].max()
         pl_fundo = converter_valor_br(df_pl.loc[df_pl["Data"] == data_pl, "PL TOTAL"].values[0])
 
-        st.markdown(f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** R$ {pl_fundo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        st.markdown(
+            f"**PL usado ({fundo_sel} - {data_pl.strftime('%d/%m/%Y')}):** "
+            + f"{brl(pl_fundo)}"
+        )
 
         # Cedentes
         df_cedentes = df_estoque.groupby(["Cedente", "CNPJ_Cedente"], as_index=False)["Valor"].sum()
@@ -320,12 +361,18 @@ with aba[1]:
         maior_cedente = df_cedentes.iloc[0]
         top5_cedentes = df_cedentes.head(5)["%PL"].sum()
 
-        st.metric("Maior Cedente", f"{maior_cedente['Cedente']} - {maior_cedente['%PL']:.2f}%",
-                  delta="✅ Enquadrado" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌ Fora do Limite")
-        st.metric("Top 5 Cedentes", f"{top5_cedentes:.2f}%",
-                  delta="✅ Enquadrado" if top5_cedentes <= limites["top_cedentes"] else "❌ Fora do Limite")
+        st.metric(
+            "Maior Cedente",
+            f"{maior_cedente['Cedente']} - {maior_cedente['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_cedente['%PL'] <= limites["maior_cedente"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            "Top 5 Cedentes",
+            f"{top5_cedentes:.2f}%",
+            delta="✅ Enquadrado" if top5_cedentes <= limites["top_cedentes"] else "❌ Fora do Limite"
+        )
 
-        df_cedentes["Valor"] = df_cedentes["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        df_cedentes["Valor"] = df_cedentes["Valor"].apply(brl)
         df_cedentes["%PL"] = df_cedentes["%PL"].apply(lambda x: f"{x:.2f}%")
 
         st.markdown("#### Cedentes")
@@ -340,12 +387,18 @@ with aba[1]:
         topN = 10 if fundo_sel == "Apuama" else 5
         topN_sacados = df_sacados.head(topN)["%PL"].sum()
 
-        st.metric("Maior Sacado", f"{maior_sacado['Sacado']} - {maior_sacado['%PL']:.2f}%",
-                  delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite")
-        st.metric(f"Top {topN} Sacados", f"{topN_sacados:.2f}%",
-                  delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite")
+        st.metric(
+            "Maior Sacado",
+            f"{maior_sacado['Sacado']} - {maior_sacado['%PL']:.2f}%",
+            delta="✅ Enquadrado" if maior_sacado['%PL'] <= limites["maior_sacado"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            f"Top {topN} Sacados",
+            f"{topN_sacados:.2f}%",
+            delta="✅ Enquadrado" if topN_sacados <= limites["top_sacados"] else "❌ Fora do Limite"
+        )
 
-        df_sacados["Valor"] = df_sacados["Valor"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        df_sacados["Valor"] = df_sacados["Valor"].apply(brl)
         df_sacados["%PL"] = df_sacados["%PL"].apply(lambda x: f"{x:.2f}%")
 
         st.markdown("#### Sacados")
@@ -358,27 +411,46 @@ with aba[1]:
         # Cedente
         with aba_sim[0]:
             cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
-            valor_simulado_ced = st.number_input("Digite o valor da operação simulada (R$)", min_value=0.0, step=1000.0, key="cedente_sim")
+            valor_simulado_ced = st.number_input(
+                "Digite o valor da operação simulada (R$)",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key="cedente_sim"
+            )
 
             if valor_simulado_ced > 0:
                 linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
+                # Valor está formatado em string BRL; convertemos
                 valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
                 novo_total = valor_atual + valor_simulado_ced
                 perc_total = novo_total / pl_fundo * 100
 
                 df_cedentes_sim = df_cedentes.copy()
-                df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = f"{perc_total:.2f}%"
-                top5_cedentes_sim = df_cedentes_sim.head(5)["%PL"].str.replace("%", "").str.replace(",", ".").astype(float).sum()
+                df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = perc_total
+                top5_cedentes_sim = df_cedentes_sim.head(5)["%PL"].astype(float).sum()
 
-                st.metric("Novo %PL do Cedente", f"{perc_total:.2f}%",
-                          delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite")
-                st.metric("Novo Top 5 Cedentes", f"{top5_cedentes_sim:.2f}%",
-                          delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite")
+                st.metric(
+                    "Novo %PL do Cedente",
+                    f"{perc_total:.2f}%",
+                    delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    "Novo Top 5 Cedentes",
+                    f"{top5_cedentes_sim:.2f}%",
+                    delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
+                )
 
         # Sacado
         with aba_sim[1]:
             sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
-            valor_simulado_sac = st.number_input("Digite o valor da operação simulada (R$)", min_value=0.0, step=1000.0, key="sacado_sim")
+            valor_simulado_sac = st.number_input(
+                "Digite o valor da operação simulada (R$)",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key="sacado_sim"
+            )
 
             if valor_simulado_sac > 0:
                 linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
@@ -387,13 +459,19 @@ with aba[1]:
                 perc_total_sac = novo_total_sac / pl_fundo * 100
 
                 df_sacados_sim = df_sacados.copy()
-                df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = f"{perc_total_sac:.2f}%"
-                topN_sacados_sim = df_sacados_sim.head(topN)["%PL"].str.replace("%", "").str.replace(",", ".").astype(float).sum()
+                df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = perc_total_sac
+                topN_sacados_sim = df_sacados_sim.head(topN)["%PL"].astype(float).sum()
 
-                st.metric("Novo %PL do Sacado", f"{perc_total_sac:.2f}%",
-                          delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite")
-                st.metric(f"Novo Top {topN} Sacados", f"{topN_sacados_sim:.2f}%",
-                          delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite")
+                st.metric(
+                    "Novo %PL do Sacado",
+                    f"{perc_total_sac:.2f}%",
+                    delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    f"Novo Top {topN} Sacados",
+                    f"{topN_sacados_sim:.2f}%",
+                    delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
+                )
 
 # ========== RODAPÉ ==========
 st.markdown(
