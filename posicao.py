@@ -4,6 +4,8 @@ import datetime
 import requests
 from io import StringIO
 import os
+import gspread
+from google.oauth2.service_account import Credentials
 
 # =================== CORES ===================
 SPACE_CADET = "#042F3C"
@@ -57,7 +59,7 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ========== FUNÇÃO PARA CONVERTER VALORES BRASILEIROS ==========
+# ========== FUNÇÃO PARA CONVERTER VALORES BR ==========
 def converter_valor_br(valor):
     if pd.isna(valor) or valor == "" or valor is None:
         return 0.0
@@ -134,21 +136,13 @@ with aba[0]:
 
     GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
 
-    # Dados principais do Caixa
+    # Aba principal do caixa
     url_caixa = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Caixa"
     r_caixa = requests.get(url_caixa)
     r_caixa.raise_for_status()
     df_caixa = pd.read_csv(StringIO(r_caixa.text))
     df_caixa["Data"] = pd.to_datetime(df_caixa["Data"], dayfirst=True, errors="coerce")
 
-    # Dados de inputs (Usado)
-    url_inputs = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=inputs_caixa"
-    r_inputs = requests.get(url_inputs)
-    r_inputs.raise_for_status()
-    df_inputs = pd.read_csv(StringIO(r_inputs.text))
-    df_inputs["Data"] = pd.to_datetime(df_inputs["Data"], dayfirst=True, errors="coerce")
-
-    # Data selecionada
     datas_caixa = sorted(df_caixa["Data"].dropna().unique())
     default_caixa = max(datas_caixa)
     data_caixa_sel = st.sidebar.date_input(
@@ -163,20 +157,30 @@ with aba[0]:
 
     data_caixa_br = data_caixa_sel.strftime("%d/%m/%Y")
     df_caixa_dia = df_caixa[df_caixa["Data"] == pd.to_datetime(data_caixa_sel)]
+
+    # Aba de inputs para valores de "Usado"
+    url_inputs = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=inputs_caixa"
+    r_inputs = requests.get(url_inputs)
+    r_inputs.raise_for_status()
+    df_inputs = pd.read_csv(StringIO(r_inputs.text))
+    df_inputs["Data"] = pd.to_datetime(df_inputs["Data"], dayfirst=True, errors="coerce")
+
+    usados_dict = {}
     df_inputs_dia = df_inputs[df_inputs["Data"] == pd.to_datetime(data_caixa_sel)]
+    for _, row in df_inputs_dia.iterrows():
+        usados_dict[row["Empresa"]] = converter_valor_br(row["Usado"])
 
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
     empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
     contas = [
         "Conta recebimento",
-        "Conta de conciliação", 
+        "Conta de conciliação",
         "Reserva de caixa",
         "Conta pgto",
         "Usado",
         "Disponível para operação"
     ]
-
     matriz = pd.DataFrame(index=contas, columns=empresas, dtype=float)
 
     for _, linha in df_caixa_dia.iterrows():
@@ -186,13 +190,8 @@ with aba[0]:
             conta_conc = converter_valor_br(linha["Conta de conciliação"])
             reserva = converter_valor_br(linha["Reserva"])
             conta_pgto = converter_valor_br(linha["Conta pgto"])
-            
-            # busca usado
-            usado_val = df_inputs_dia.loc[df_inputs_dia["Empresa"] == empresa, "Usado"]
-            usado_val = usado_val.iloc[0] if not usado_val.empty else 0.0
-            usado = converter_valor_br(usado_val)
-
-            disponivel = conta_pgto - usado
+            usado = usados_dict.get(empresa, 0.0)
+            disponivel = conta_pgto - reserva - usado
 
             matriz.at["Conta recebimento", empresa] = conta_receb
             matriz.at["Conta de conciliação", empresa] = conta_conc
@@ -201,32 +200,47 @@ with aba[0]:
             matriz.at["Usado", empresa] = usado
             matriz.at["Disponível para operação", empresa] = disponivel
 
+    # Inputs no Streamlit
+    st.markdown("### Ajustar valores de 'Usado'")
+    novos_usados = {}
+    for emp in empresas:
+        valor_atual = usados_dict.get(emp, 0.0)
+        novos_usados[emp] = st.number_input(f"{emp} - Usado", min_value=0.0, value=float(valor_atual), step=1000.0)
+
+    if st.button("💾 Salvar Usados"):
+        creds = Credentials.from_service_account_file("service_account.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet("inputs_caixa")
+
+        for emp, val in novos_usados.items():
+            mask = (df_inputs["Data"] == pd.to_datetime(data_caixa_sel)) & (df_inputs["Empresa"] == emp)
+            if mask.any():
+                cell = sheet.find(emp)
+                sheet.update_cell(cell.row, 3, val)
+            else:
+                sheet.append_row([data_caixa_sel.strftime("%d/%m/%Y"), emp, val])
+
+        st.success("Valores de 'Usado' salvos com sucesso!")
+
     def brl(x):
         try:
             return f"R$ {float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         except:
             return "R$ 0,00"
 
-    matriz_fmt = matriz.applymap(brl)
-    matriz_fmt = matriz_fmt.dropna(how="all")
-
+    matriz_fmt = matriz.applymap(brl).dropna(how="all")
     def highlight_last_row(row):
         if row.name == "Disponível para operação":
             return ["font-weight: bold" for _ in row]
         return ["" for _ in row]
-
     styled = matriz_fmt.style.apply(highlight_last_row, axis=1)
 
-    st.dataframe(
-        styled,
-        use_container_width=True,
-        height=(40 * len(matriz_fmt) + 60)
-    )
+    st.dataframe(styled, use_container_width=True, height=(40 * len(matriz_fmt) + 60))
 
-# ========== LIMITES DE ENQUADRAMENTO ==========
+# ========== ABA ENQUADRAMENTO ==========
 LIMITES = {
     "Apuama": {"maior_cedente": 10, "top_cedentes": 40, "maior_sacado": 10, "top_sacados": 35},
-    "Bristol": {"maior_cedente": 7, "top_cedentes": 40, "maior_sacado": 10, "top_sacados": 25}
+    "Bristol": {"maior_cedente": 7, "top_cedentes": 40, "maior_sacado": 10, "top_sacados": 25},
 }
 
 CEDENTES_SUBSTITUIR = [
@@ -236,7 +250,6 @@ CEDENTES_SUBSTITUIR = [
     "BMP MONEY PLUS SOCIEDADE DE CRÉDITO DIRETO SA"
 ]
 
-# ========== ABA ENQUADRAMENTO ==========
 with aba[1]:
     st.markdown("### 📊 Enquadramento - Cedentes e Sacados")
 
