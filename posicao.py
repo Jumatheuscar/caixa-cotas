@@ -123,7 +123,7 @@ autentica_usuario()
 
 # ========== HEADER ==========
 with st.container():
-    cols = st.columns([0.095, 0.905])
+    cols = st.columns([0.2, 0.8])
     with cols[0]:
         st.image("imagens/Capital-branca.png", width=220, output_format="PNG")
     with cols[1]:
