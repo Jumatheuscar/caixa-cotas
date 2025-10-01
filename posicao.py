@@ -172,7 +172,7 @@ with aba[0]:
 
     st.markdown(f"<span class='table-title'>POSIÇÃO DIÁRIA - {data_caixa_br}</span>", unsafe_allow_html=True)
 
-    empresas = ["Apuama", "Bristol", "Consignado", "Tractor"]
+    empresas = ["Apuama", "Bristol"]
     contas = [
         "Conta recebimento",
         "Conta de conciliação",
