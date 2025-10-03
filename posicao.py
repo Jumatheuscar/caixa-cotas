@@ -405,73 +405,92 @@ with aba[1]:
         st.dataframe(df_sacados, use_container_width=True, height=400)
 
         # ========== SIMULADOR ==========
-        st.markdown("### 🧮 Simulador de Operação")
-        aba_sim = st.tabs(["Cedente", "Sacado"])
+st.markdown("### 🧮 Simulador de Operação")
+aba_sim = st.tabs(["Cedente", "Sacado"])
 
-        # Cedente
-        with aba_sim[0]:
-            cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
-            valor_simulado_ced = st.number_input(
-                "Digite o valor da operação simulada (R$)",
-                min_value=0.0,
-                step=1000.0,
-                format="%.2f",
-                key="cedente_sim"
-            )
+# Cedente
+with aba_sim[0]:
+    cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
+    valor_simulado_ced = st.number_input(
+        "Digite o valor da operação simulada (R$)",
+        min_value=0.0,
+        step=1000.0,
+        format="%.2f",
+        key="cedente_sim"
+    )
 
-            if valor_simulado_ced > 0:
-                linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
-                # Valor está formatado em string BRL; convertemos
-                valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
-                novo_total = valor_atual + valor_simulado_ced
-                perc_total = novo_total / pl_fundo * 100
+    if valor_simulado_ced > 0:
+        linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
+        # Converter valor que está em BRL string
+        valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
+        novo_total = valor_atual + valor_simulado_ced
+        perc_total = novo_total / pl_fundo * 100
 
-                df_cedentes_sim = df_cedentes.copy()
-                df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = perc_total
-                top5_cedentes_sim = df_cedentes_sim.head(5)["%PL"].astype(float).sum()
+        df_cedentes_sim = df_cedentes.copy()
+        df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = f"{perc_total:.2f}%"
 
-                st.metric(
-                    "Novo %PL do Cedente",
-                    f"{perc_total:.2f}%",
-                    delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
-                )
-                st.metric(
-                    "Novo Top 5 Cedentes",
-                    f"{top5_cedentes_sim:.2f}%",
-                    delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
-                )
+        # Corrige parsing de strings com % e vírgula
+        top5_cedentes_sim = (
+            df_cedentes_sim.head(5)["%PL"]
+            .astype(str)
+            .str.replace("%", "", regex=False)
+            .str.replace(",", ".", regex=False)
+            .astype(float)
+            .sum()
+        )
 
-        # Sacado
-        with aba_sim[1]:
-            sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
-            valor_simulado_sac = st.number_input(
-                "Digite o valor da operação simulada (R$)",
-                min_value=0.0,
-                step=1000.0,
-                format="%.2f",
-                key="sacado_sim"
-            )
+        st.metric(
+            "Novo %PL do Cedente",
+            f"{perc_total:.2f}%",
+            delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            "Novo Top 5 Cedentes",
+            f"{top5_cedentes_sim:.2f}%",
+            delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
+        )
 
-            if valor_simulado_sac > 0:
-                linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
-                valor_atual_sac = converter_valor_br(linha_sac["Valor"].values[0])
-                novo_total_sac = valor_atual_sac + valor_simulado_sac
-                perc_total_sac = novo_total_sac / pl_fundo * 100
+# Sacado
+with aba_sim[1]:
+    sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
+    valor_simulado_sac = st.number_input(
+        "Digite o valor da operação simulada (R$)",
+        min_value=0.0,
+        step=1000.0,
+        format="%.2f",
+        key="sacado_sim"
+    )
 
-                df_sacados_sim = df_sacados.copy()
-                df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = perc_total_sac
-                topN_sacados_sim = df_sacados_sim.head(topN)["%PL"].astype(float).sum()
+    if valor_simulado_sac > 0:
+        linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
+        valor_atual_sac = converter_valor_br(linha_sac["Valor"].values[0])
+        novo_total_sac = valor_atual_sac + valor_simulado_sac
+        perc_total_sac = novo_total_sac / pl_fundo * 100
 
-                st.metric(
-                    "Novo %PL do Sacado",
-                    f"{perc_total_sac:.2f}%",
-                    delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
-                )
-                st.metric(
-                    f"Novo Top {topN} Sacados",
-                    f"{topN_sacados_sim:.2f}%",
-                    delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
-                )
+        df_sacados_sim = df_sacados.copy()
+        df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = f"{perc_total_sac:.2f}%"
+
+        # Corrige parsing de strings com % e vírgula
+        topN_sacados_sim = (
+            df_sacados_sim.head(topN)["%PL"]
+            .astype(str)
+            .str.replace("%", "", regex=False)
+            .str.replace(",", ".", regex=False)
+            .astype(float)
+            .sum()
+        )
+
+        st.metric(
+            "Novo %PL do Sacado",
+            f"{perc_total_sac:.2f}%",
+            delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
+        )
+        st.metric(
+            f"Novo Top {topN} Sacados",
+            f"{topN_sacados_sim:.2f}%",
+            delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
+        )
+
 
 # ========== RODAPÉ ==========
 st.markdown(
