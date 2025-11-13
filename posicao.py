@@ -90,10 +90,6 @@ def brl(x):
         return "R$ 0,00"
 
 def input_brl(label, value=0.0, key=None):
-    """
-    Campo de entrada em texto usando padrão BR (milhar . e decimal ,).
-    Retorna float em padrão Python.
-    """
     default_txt = f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     txt = st.text_input(label, value=default_txt, key=key)
     return converter_valor_br(txt)
@@ -144,8 +140,8 @@ with st.container():
 
 st.markdown('<br/>', unsafe_allow_html=True)
 
-# ========== ABAS ==========
-aba = st.tabs(["🍯 Caixa", "📊 Enquadramento"])
+# ========== ABAS PRINCIPAIS ==========
+aba = st.tabs(["🍯 Caixa", "📊 Enquadramento", "📉 Risco"])
 
 # ========== ABA CAIXA ==========
 with aba[0]:
@@ -217,14 +213,13 @@ with aba[0]:
             matriz.at["Usado", empresa] = usado
             matriz.at["Disponível para operação", empresa] = disponivel
 
-    # ===== Inputs (BR) + pré-visualização instantânea =====
+    # Inputs + pré-visualização
     st.markdown("### Ajustar valores de 'Usado'")
     novos_usados = {}
     for emp in empresas:
         valor_atual = usados_dict.get(emp, 0.0)
         novos_usados[emp] = input_brl(f"{emp} - Usado (R$)", value=valor_atual, key=f"usado_{emp}")
 
-    # Pré-visualização: atualiza a matriz na hora que digita (antes de salvar)
     matriz_preview = matriz.copy()
     for emp, val in novos_usados.items():
         if emp in matriz_preview.columns:
@@ -233,7 +228,6 @@ with aba[0]:
             matriz_preview.at["Usado", emp] = val
             matriz_preview.at["Disponível para operação", emp] = conta_pgto - reserva - val
 
-    # Botão de salvar -> grava no Google Sheets + rerun instantâneo
     if st.button("💾 Salvar Usados"):
         service_account_info = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(
@@ -246,11 +240,7 @@ with aba[0]:
         for emp, val in novos_usados.items():
             mask = (df_inputs["Data"] == pd.to_datetime(data_caixa_sel)) & (df_inputs["Empresa"] == emp)
             if mask.any():
-                # Atualiza a linha certa por EMPRESA + DATA
-                # Procurar a célula do EMPRESA na coluna correta:
-                # Aqui, por simplicidade, usamos find(emp) e assumimos estrutura estável (Data | Empresa | Usado)
                 cell_emp = sheet.find(emp)
-                # Coluna 3 = "Usado"
                 sheet.update_cell(cell_emp.row, 3, float(val))
             else:
                 sheet.append_row([data_caixa_sel.strftime("%d/%m/%Y"), emp, float(val)])
@@ -258,7 +248,6 @@ with aba[0]:
         st.success("Valores de 'Usado' salvos com sucesso!")
         st.rerun()
 
-    # Render da tabela (com pré-visualização)
     matriz_fmt = matriz_preview.applymap(brl).dropna(how="all")
 
     def highlight_last_row(row):
@@ -405,92 +394,151 @@ with aba[1]:
         st.dataframe(df_sacados, use_container_width=True, height=400)
 
         # ========== SIMULADOR ==========
-st.markdown("### 🧮 Simulador de Operação")
-aba_sim = st.tabs(["Cedente", "Sacado"])
+        st.markdown("### 🧮 Simulador de Operação")
+        aba_sim = st.tabs(["Cedente", "Sacado"])
 
-# Cedente
-with aba_sim[0]:
-    cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
-    valor_simulado_ced = st.number_input(
-        "Digite o valor da operação simulada (R$)",
-        min_value=0.0,
-        step=1000.0,
-        format="%.2f",
-        key="cedente_sim"
+        # Cedente
+        with aba_sim[0]:
+            cedente_sim = st.selectbox("Selecione o Cedente para simular", df_cedentes["Cedente"].unique())
+            valor_simulado_ced = st.number_input(
+                "Digite o valor da operação simulada (R$)",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key="cedente_sim"
+            )
+
+            if valor_simulado_ced > 0:
+                linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
+                valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
+                novo_total = valor_atual + valor_simulado_ced
+                perc_total = novo_total / pl_fundo * 100
+
+                df_cedentes_sim = df_cedentes.copy()
+                df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = f"{perc_total:.2f}%"
+
+                top5_cedentes_sim = (
+                    df_cedentes_sim.head(5)["%PL"]
+                    .astype(str)
+                    .str.replace("%", "", regex=False)
+                    .str.replace(",", ".", regex=False)
+                    .astype(float)
+                    .sum()
+                )
+
+                st.metric(
+                    "Novo %PL do Cedente",
+                    f"{perc_total:.2f}%",
+                    delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    "Novo Top 5 Cedentes",
+                    f"{top5_cedentes_sim:.2f}%",
+                    delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
+                )
+
+        # Sacado
+        with aba_sim[1]:
+            sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
+            valor_simulado_sac = st.number_input(
+                "Digite o valor da operação simulada (R$)",
+                min_value=0.0,
+                step=1000.0,
+                format="%.2f",
+                key="sacado_sim"
+            )
+
+            if valor_simulado_sac > 0:
+                linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
+                valor_atual_sac = converter_valor_br(linha_sac["Valor"].values[0])
+                novo_total_sac = valor_atual_sac + valor_simulado_sac
+                perc_total_sac = novo_total_sac / pl_fundo * 100
+
+                df_sacados_sim = df_sacados.copy()
+                df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = f"{perc_total_sac:.2f}%"
+
+                topN_sacados_sim = (
+                    df_sacados_sim.head(topN)["%PL"]
+                    .astype(str)
+                    .str.replace("%", "", regex=False)
+                    .str.replace(",", ".", regex=False)
+                    .astype(float)
+                    .sum()
+                )
+
+                st.metric(
+                    "Novo %PL do Sacado",
+                    f"{perc_total_sac:.2f}%",
+                    delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
+                )
+                st.metric(
+                    f"Novo Top {topN} Sacados",
+                    f"{topN_sacados_sim:.2f}%",
+                    delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
+                )
+
+# ========== ABA RISCO ==========
+with aba[2]:
+    st.markdown("### 📉 Risco - Performance de Limite")
+
+    uploaded_risco = st.file_uploader(
+        "Envie a planilha de risco (base_risco.xlsx)",
+        type=["xlsx"],
+        key="upload_risco"
     )
 
-    if valor_simulado_ced > 0:
-        linha_ced = df_cedentes[df_cedentes["Cedente"] == cedente_sim].copy()
-        # Converter valor que está em BRL string
-        valor_atual = converter_valor_br(linha_ced["Valor"].values[0])
-        novo_total = valor_atual + valor_simulado_ced
-        perc_total = novo_total / pl_fundo * 100
+    df_risco = None
+    if uploaded_risco:
+        df_risco = pd.read_excel(uploaded_risco)
 
-        df_cedentes_sim = df_cedentes.copy()
-        df_cedentes_sim.loc[df_cedentes_sim["Cedente"] == cedente_sim, "%PL"] = f"{perc_total:.2f}%"
+    if df_risco is not None:
+        df_risco = df_risco.rename(columns={
+            "Código": "codigo",
+            "Cedente": "cedente",
+            "Lim. Uti.": "lim_uti",
+            "Lim. Disponivel": "lim_disp",
+            "Lim. Disponível": "lim_disp",
+        })
 
-        # Corrige parsing de strings com % e vírgula
-        top5_cedentes_sim = (
-            df_cedentes_sim.head(5)["%PL"]
-            .astype(str)
-            .str.replace("%", "", regex=False)
-            .str.replace(",", ".", regex=False)
-            .astype(float)
-            .sum()
-        )
+        GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
+        url_dim = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=DIM_cedentes"
 
-        st.metric(
-            "Novo %PL do Cedente",
-            f"{perc_total:.2f}%",
-            delta="✅ Enquadrado" if perc_total <= limites["maior_cedente"] else "❌ Fora do Limite"
-        )
-        st.metric(
-            "Novo Top 5 Cedentes",
-            f"{top5_cedentes_sim:.2f}%",
-            delta="✅ Enquadrado" if top5_cedentes_sim <= limites["top_cedentes"] else "❌ Fora do Limite"
-        )
+        r_dim = requests.get(url_dim)
+        r_dim.raise_for_status()
 
-# Sacado
-with aba_sim[1]:
-    sacado_sim = st.selectbox("Selecione o Sacado para simular", df_sacados["Sacado"].unique())
-    valor_simulado_sac = st.number_input(
-        "Digite o valor da operação simulada (R$)",
-        min_value=0.0,
-        step=1000.0,
-        format="%.2f",
-        key="sacado_sim"
-    )
+        df_dim = pd.read_csv(StringIO(r_dim.text))
+        df_dim = df_dim.rename(columns={
+            "Comercial": "comercial",
+            "Código": "codigo",
+            "Grupo": "grupo",
+            "Cedente": "cedente_dim"
+        })
 
-    if valor_simulado_sac > 0:
-        linha_sac = df_sacados[df_sacados["Sacado"] == sacado_sim].copy()
-        valor_atual_sac = converter_valor_br(linha_sac["Valor"].values[0])
-        novo_total_sac = valor_atual_sac + valor_simulado_sac
-        perc_total_sac = novo_total_sac / pl_fundo * 100
+        df_final = df_risco.merge(df_dim, on="codigo", how="left")
 
-        df_sacados_sim = df_sacados.copy()
-        df_sacados_sim.loc[df_sacados_sim["Sacado"] == sacado_sim, "%PL"] = f"{perc_total_sac:.2f}%"
+        total_uti = df_final["lim_uti"].astype(float).sum()
+        if total_uti == 0:
+            df_final["performance"] = 0.0
+        else:
+            df_final["performance"] = df_final["lim_uti"].astype(float) / total_uti
 
-        # Corrige parsing de strings com % e vírgula
-        topN_sacados_sim = (
-            df_sacados_sim.head(topN)["%PL"]
-            .astype(str)
-            .str.replace("%", "", regex=False)
-            .str.replace(",", ".", regex=False)
-            .astype(float)
-            .sum()
-        )
+        df_view = df_final[[
+            "comercial",
+            "cedente",
+            "lim_uti",
+            "lim_disp",
+            "performance"
+        ]].copy()
 
-        st.metric(
-            "Novo %PL do Sacado",
-            f"{perc_total_sac:.2f}%",
-            delta="✅ Enquadrado" if perc_total_sac <= limites["maior_sacado"] else "❌ Fora do Limite"
-        )
-        st.metric(
-            f"Novo Top {topN} Sacados",
-            f"{topN_sacados_sim:.2f}%",
-            delta="✅ Enquadrado" if topN_sacados_sim <= limites["top_sacados"] else "❌ Fora do Limite"
-        )
+        df_view["lim_uti"] = df_view["lim_uti"].apply(brl)
+        df_view["lim_disp"] = df_view["lim_disp"].apply(brl)
+        df_view["performance"] = df_view["performance"].apply(lambda x: f"{x*100:.2f}%")
 
+        st.markdown("#### Tabela de Performance")
+        st.dataframe(df_view, use_container_width=True, height=500)
+
+    else:
+        st.info("Envie a planilha para visualizar o risco.")
 
 # ========== RODAPÉ ==========
 st.markdown(
