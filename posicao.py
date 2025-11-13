@@ -481,17 +481,47 @@ with aba[1]:
 with aba[2]:
     st.markdown("### 📉 Risco - Performance de Limite")
 
-    uploaded_risco = st.file_uploader(
-        "Envie a planilha de risco (base_risco.xlsx)",
-        type=["xlsx"],
-        key="upload_risco"
-    )
+    tmp_risco = "/tmp/base_risco.xlsx"
 
-    df_risco = None
-    if uploaded_risco:
-        df_risco = pd.read_excel(uploaded_risco)
+    if "risco_uploaded" not in st.session_state:
+        st.session_state["risco_uploaded"] = False
 
+    # ----- UPLOAD / CARREGAMENTO -----
+    if not st.session_state["risco_uploaded"]:
+        uploaded_risco = st.file_uploader(
+            "Envie a planilha de risco (base_risco.xlsx)",
+            type=["xlsx"],
+            key="upload_risco"
+        )
+
+        if uploaded_risco is not None:
+            # salva no disco (persistência)
+            with open(tmp_risco, "wb") as f:
+                f.write(uploaded_risco.getbuffer())
+
+            st.session_state["risco_uploaded"] = True
+            df_risco = pd.read_excel(tmp_risco)
+
+        elif os.path.exists(tmp_risco):
+            # se já existe arquivo salvo, usa ele
+            df_risco = pd.read_excel(tmp_risco)
+            st.session_state["risco_uploaded"] = True
+        else:
+            df_risco = None
+
+    else:
+        # já carregado em sessão → carrega do arquivo salvo
+        if os.path.exists(tmp_risco):
+            df_risco = pd.read_excel(tmp_risco)
+
+        # botão para substituir arquivo
+        if st.button("📂 Carregar novo arquivo"):
+            st.session_state["risco_uploaded"] = False
+            st.rerun()
+
+    # ----- PROCESSAMENTO -----
     if df_risco is not None:
+        # --- Renomear e padronizar colunas ---
         df_risco = df_risco.rename(columns={
             "Código": "codigo",
             "Cedente": "cedente",
@@ -500,6 +530,7 @@ with aba[2]:
             "Lim. Disponível": "lim_disp",
         })
 
+        # --- Carregar DIM ---
         GOOGLE_SHEET_ID = "1F4ziJnyxpLr9VuksbSvL21cjmGzoV0mDPSk7XzX72iQ"
         url_dim = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=DIM_cedentes"
 
@@ -514,14 +545,14 @@ with aba[2]:
             "Cedente": "cedente_dim"
         })
 
+        # --- MERGE ---
         df_final = df_risco.merge(df_dim, on="codigo", how="left")
 
+        # --- PERFORMANCE ---
         total_uti = df_final["lim_uti"].astype(float).sum()
-        if total_uti == 0:
-            df_final["performance"] = 0.0
-        else:
-            df_final["performance"] = df_final["lim_uti"].astype(float) / total_uti
+        df_final["performance"] = 0 if total_uti == 0 else df_final["lim_uti"] / total_uti
 
+        # --- VIEW ---
         df_view = df_final[[
             "comercial",
             "cedente",
