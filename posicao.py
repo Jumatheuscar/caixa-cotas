@@ -495,7 +495,6 @@ with aba[2]:
         )
 
         if uploaded_risco is not None:
-            # salva no disco (persistência)
             with open(tmp_risco, "wb") as f:
                 f.write(uploaded_risco.getbuffer())
 
@@ -503,24 +502,22 @@ with aba[2]:
             df_risco = pd.read_excel(tmp_risco)
 
         elif os.path.exists(tmp_risco):
-            # se já existe arquivo salvo, usa ele
             df_risco = pd.read_excel(tmp_risco)
             st.session_state["risco_uploaded"] = True
         else:
             df_risco = None
 
     else:
-        # já carregado em sessão → carrega do arquivo salvo
         if os.path.exists(tmp_risco):
             df_risco = pd.read_excel(tmp_risco)
 
-        # botão para substituir arquivo
         if st.button("📂 Carregar novo arquivo"):
             st.session_state["risco_uploaded"] = False
             st.rerun()
 
     # ----- PROCESSAMENTO -----
     if df_risco is not None:
+
         # --- Renomear e padronizar colunas ---
         df_risco = df_risco.rename(columns={
             "Código": "codigo",
@@ -552,7 +549,7 @@ with aba[2]:
         total_uti = df_final["lim_uti"].astype(float).sum()
         df_final["performance"] = 0 if total_uti == 0 else df_final["lim_uti"] / total_uti
 
-        # --- VIEW ---
+        # --- VIEW FINAL ---
         df_view = df_final[[
             "comercial",
             "cedente",
@@ -561,10 +558,29 @@ with aba[2]:
             "performance"
         ]].copy()
 
+        # --- Formatação ---
         df_view["lim_uti"] = df_view["lim_uti"].apply(brl)
         df_view["lim_disp"] = df_view["lim_disp"].apply(brl)
         df_view["performance"] = df_view["performance"].apply(lambda x: f"{x*100:.2f}%")
 
+        # ================================
+        #       🔎 FILTRO COMERCIAL
+        # ================================
+        lista_comerciais = sorted(df_view["comercial"].dropna().unique().tolist())
+        lista_comerciais = ["Todos"] + lista_comerciais
+
+        filtro_comercial = st.selectbox(
+            "Filtrar por Comercial:",
+            lista_comerciais,
+            index=0
+        )
+
+        if filtro_comercial != "Todos":
+            df_view = df_view[df_view["comercial"] == filtro_comercial]
+
+        # ================================
+        #        📊 TABELA FINAL
+        # ================================
         st.markdown("#### Tabela de Performance")
         st.dataframe(df_view, use_container_width=True, height=500)
 
