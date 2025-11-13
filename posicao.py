@@ -511,7 +511,8 @@ with aba[2]:
         if os.path.exists(tmp_risco):
             df_risco = pd.read_excel(tmp_risco)
 
-        if st.button("📂 Carregar novo arquivo"):
+        # 🔑 key única pra não conflitar com a aba Enquadramento
+        if st.button("📂 Carregar novo arquivo", key="btn_recarregar_risco"):
             st.session_state["risco_uploaded"] = False
             st.rerun()
 
@@ -561,7 +562,12 @@ with aba[2]:
         # --- Formatação ---
         df_view["lim_uti"] = df_view["lim_uti"].apply(brl)
         df_view["lim_disp"] = df_view["lim_disp"].apply(brl)
-        df_view["performance"] = df_view["performance"].apply(lambda x: f"{x*100:.2f}%")
+        df_view["performance"] = (
+            df_view["performance"]
+            .fillna(0)
+            .astype(float)
+            .apply(lambda x: f"{x*100:.2f}%")
+        )
 
         # ================================
         #       🔎 FILTRO COMERCIAL
@@ -572,7 +578,8 @@ with aba[2]:
         filtro_comercial = st.selectbox(
             "Filtrar por Comercial:",
             lista_comerciais,
-            index=0
+            index=0,
+            key="filtro_comercial_risco"  # 🔑 key única
         )
 
         if filtro_comercial != "Todos":
