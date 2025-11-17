@@ -546,6 +546,11 @@ with aba[2]:
         # --- MERGE ---
         df_final = df_risco.merge(df_dim, on="codigo", how="left")
 
+        # --- REMOVER CEDENTES 100% PROVISIONADOS ---
+        df_final["vencidos"] = pd.to_numeric(df_final.get("Vencidos", 0), errors="coerce").fillna(0)
+        df_final["lim_uti"] = pd.to_numeric(df_final["lim_uti"], errors="coerce").fillna(0)
+        df_final = df_final[df_final["lim_uti"] != df_final["vencidos"]]
+
         # --- PERFORMANCE ---
         total_uti = df_final["lim_uti"].astype(float).sum()
         df_final["performance"] = 0 if total_uti == 0 else df_final["lim_uti"] / total_uti
