@@ -594,7 +594,7 @@ with aba[2]:
         #        📊 TABELA FINAL
         # ================================
         st.markdown("#### Tabela de Performance")
-        st.dataframe(df_view, use_container_width=True, height=500)
+        st.dataframe(df_view, use_container_width=True, height=720)
 
     else:
         st.info("Envie a planilha para visualizar o risco.")
