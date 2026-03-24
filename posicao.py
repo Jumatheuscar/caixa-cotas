@@ -302,6 +302,8 @@ with aba[1]:
         if os.path.exists(tmp_path):
             df_estoque = pd.read_excel(tmp_path)
             if st.button("📂 Carregar novo arquivo"):
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
                 st.session_state["file_uploaded"] = False
                 st.rerun()
         else:
