@@ -248,7 +248,7 @@ with aba[0]:
         st.success("Valores de 'Usado' salvos com sucesso!")
         st.rerun()
 
-    matriz_fmt = matriz_preview.applymap(brl).dropna(how="all")
+    matriz_fmt = matriz_preview.apply(lambda col: col.map(brl)).dropna(how="all")
 
     def highlight_last_row(row):
         if row.name == "Disponível para operação":
